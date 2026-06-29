@@ -1273,6 +1273,24 @@ func handleCommand(raw string) CommandResponse {
 			fmt.Sscanf(portStr, "%d", &port)
 		}
 
+		// Extract hostname (before port or path)
+		host := cleanURL
+		if idx := strings.Index(cleanURL, ":"); idx >= 0 {
+			host = cleanURL[:idx]
+		} else if idx := strings.Index(cleanURL, "/"); idx >= 0 {
+			host = cleanURL[:idx]
+		}
+
+		// Only simulate for localhost; external hosts get a connection timeout
+		isLocal := host == "" || host == "localhost" || host == "127.0.0.1" || host == "::1"
+		if !isLocal {
+			lines = append(lines,
+				line(fmt.Sprintf("curl: (28) Failed to connect to %s port %d after 30000ms: Couldn't connect to server", host, port), "err"),
+				blank(),
+			)
+			break
+		}
+
 		state.mu.Lock()
 		var found *Service
 		for _, s := range state.Services {

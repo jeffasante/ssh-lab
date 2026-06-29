@@ -677,7 +677,7 @@ export default function Terminal({
             <div
               key={i}
               style={{
-                color: CLASS_COLORS[ln.class] ?? "#d4d4d4",
+                color: classColors(theme)[ln.class] ?? theme.text,
                 whiteSpace: "pre-wrap",
                 wordBreak: "break-all",
               }}
