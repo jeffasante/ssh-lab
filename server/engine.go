@@ -2,6 +2,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"fmt"
 	"math"
 	"math/rand"
@@ -37,9 +38,15 @@ type OutputLine struct {
 	Class string `json:"class"`
 }
 
+type NanoPayload struct {
+	Filename string `json:"filename"`
+	Content  string `json:"content"`
+}
+
 type CommandResponse struct {
 	Lines    []OutputLine       `json:"lines"`
 	Services map[string]Service `json:"services,omitempty"`
+	Nano     *NanoPayload       `json:"nano,omitempty"`
 }
 
 var state = &ServerState{
@@ -694,12 +701,14 @@ func handleCommand(raw string) CommandResponse {
 		return CommandResponse{}
 	}
 
-	state.mu.Lock()
-	state.History = append([]string{raw}, state.History...)
-	if len(state.History) > 100 {
-		state.History = state.History[:100]
+	if !strings.HasPrefix(raw, "__") {
+		state.mu.Lock()
+		state.History = append(state.History, raw)
+		if len(state.History) > 100 {
+			state.History = state.History[1:]
+		}
+		state.mu.Unlock()
 	}
-	state.mu.Unlock()
 
 	// ── Pipe support ──────────────────────────────────────────────────────
 	if strings.Contains(raw, " | ") {
@@ -943,6 +952,7 @@ func handleCommand(raw string) CommandResponse {
 			{"CMD > file / CMD >> file", "Output redirection"},
 			{"history", "Command history"},
 			{"clear", "Clear terminal"},
+			{"tutorial", "Interactive command walkthrough"},
 			{"exit", "Close session"},
 		}
 		lines = append(lines, line("Available commands (simulated)", "head"), blank())
@@ -1108,11 +1118,12 @@ func handleCommand(raw string) CommandResponse {
 		state.mu.Lock()
 		hist := state.History
 		state.mu.Unlock()
-		for i, h := range hist {
-			if i >= 20 {
-				break
-			}
-			lines = append(lines, line(fmt.Sprintf("  %4d  %s", i+1, h), "muted"))
+		start := 0
+		if len(hist) > 20 {
+			start = len(hist) - 20
+		}
+		for i := start; i < len(hist); i++ {
+			lines = append(lines, line(fmt.Sprintf("  %4d  %s", i+1, hist[i]), "muted"))
 		}
 		lines = append(lines, blank())
 
@@ -1593,6 +1604,100 @@ func handleCommand(raw string) CommandResponse {
 			return handleCommand(fmt.Sprintf("systemctl %s %s", sub2, svcArg))
 		}
 		lines = append(lines, line("Usage: service <name> start|stop|status|restart", "warn"), blank())
+
+	case "tutorial":
+		topic := ""
+		if len(args) > 0 {
+			topic = strings.ToLower(args[0])
+			topic = strings.ReplaceAll(topic, "-", "")
+			topic = strings.ReplaceAll(topic, "_", "")
+		}
+
+		switch topic {
+		case "systemctl", "svc":
+			lines = append(lines,
+				line("━━┫ systemctl tutorial ┣━━", "head"),
+				blank(),
+				line("1. Check all services:", "muted"),
+				line("   systemctl status", "ok"),
+				blank(),
+				line("2. Check a specific service:", "muted"),
+				line("   systemctl status nginx", "ok"),
+				blank(),
+				line("3. Stop a service:", "muted"),
+				line("   systemctl stop nginx", "ok"),
+				blank(),
+				line("4. Start a service:", "muted"),
+				line("   systemctl start nginx", "ok"),
+				blank(),
+				line("5. List all units:", "muted"),
+				line("   systemctl list-units", "ok"),
+				blank(),
+				line("Available: tutorial systemctl, tutorial docker, tutorial curl, tutorial basic", "muted"),
+				blank(),
+			)
+
+		case "docker", "container":
+			lines = append(lines,
+				line("━━┫ docker tutorial ┣━━", "head"),
+				blank(),
+				line("1. List running containers:", "muted"),
+				line("   docker ps", "ok"),
+				blank(),
+				line("2. View container logs:", "muted"),
+				line("   docker logs lab-nginx", "ok"),
+				blank(),
+				line("3. Container resource usage:", "muted"),
+				line("   docker stats", "ok"),
+				blank(),
+				line("4. List images:", "muted"),
+				line("   docker images", "ok"),
+				blank(),
+				line("5. Docker Compose:", "muted"),
+				line("   docker compose ps", "ok"),
+				blank(),
+				line("Available: tutorial systemctl, tutorial docker, tutorial curl, tutorial basic", "muted"),
+				blank(),
+			)
+
+		case "curl", "http":
+			lines = append(lines,
+				line("━━┫ curl tutorial ┣━━", "head"),
+				blank(),
+				line("1. Probe nginx (port 80):", "muted"),
+				line("   curl localhost:80", "ok"),
+				blank(),
+				line("2. Probe Node API (port 3000):", "muted"),
+				line("   curl localhost:3000", "ok"),
+				blank(),
+				line("3. Prometheus metrics:", "muted"),
+				line("   curl localhost:9090/metrics", "ok"),
+				blank(),
+				line("4. Node exporter:", "muted"),
+				line("   curl localhost:9100/metrics", "ok"),
+				blank(),
+				line("5. Download a file:", "muted"),
+				line("   wget http://localhost:80", "ok"),
+				blank(),
+				line("Available: tutorial systemctl, tutorial docker, tutorial curl, tutorial basic", "muted"),
+				blank(),
+			)
+
+		default:
+			lines = append(lines,
+				line("━━┫ ssh-lab tutorials ┣━━", "head"),
+				blank(),
+				line("Pick a topic:", "muted"),
+				blank(),
+				line("  tutorial systemctl    — Manage services with systemctl", "ok"),
+				line("  tutorial docker       — Docker container management", "ok"),
+				line("  tutorial curl         — HTTP probing and curl", "ok"),
+				line("  tutorial basic        — Basic Linux commands", "ok"),
+				blank(),
+				line("Tip: Tab-completion works for commands, files, and services", "muted"),
+				blank(),
+			)
+		}
 
 	case "exit", "logout":
 		lines = append(lines,
@@ -2453,17 +2558,20 @@ func handleCommand(raw string) CommandResponse {
 
 	case "nano", "vi", "vim":
 		if len(args) == 0 {
-			lines = append(lines, line(fmt.Sprintf("(lab mode: %s requires a filename)", cmd), "warn"), blank())
+			lines = append(lines, line(fmt.Sprintf("usage: %s <filename>", cmd), "warn"), blank())
 		} else {
 			file := args[0]
-			if _, exists := userFiles[file]; !exists {
-				userFiles[file] = ""
+			content := ""
+			if c, ok := getFileContent(file); ok {
+				content = c
 			}
-			lines = append(lines,
-				line(fmt.Sprintf("(%s: opened '%s' — lab mode, editor is simulated)", cmd, file), "warn"),
-				line("(file created/touched — use 'echo \"content\" > file' to write)", "muted"),
-				blank(),
-			)
+			return CommandResponse{
+				Lines: []OutputLine{},
+				Nano: &NanoPayload{
+					Filename: file,
+					Content:  content,
+				},
+			}
 		}
 
 	// ── Process control ───────────────────────────────────────────────────
@@ -2654,6 +2762,17 @@ func handleCommand(raw string) CommandResponse {
 		} else {
 			lines = append(lines, line("tee: missing file operand", "err"), blank())
 		}
+
+	case "__writefile":
+		if len(args) >= 2 {
+			filename := args[0]
+			b64Content := args[1]
+			dec, err := base64.StdEncoding.DecodeString(b64Content)
+			if err == nil {
+				userFiles[filename] = string(dec)
+			}
+		}
+		return CommandResponse{Lines: []OutputLine{}}
 
 	case "xargs":
 		lines = append(lines, line("(lab mode: xargs is not supported — run commands directly)", "warn"), blank())

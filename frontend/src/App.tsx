@@ -5,6 +5,7 @@ import Terminal from "./components/Terminal";
 import Sidebar from "./components/Sidebar";
 import Onboarding from "./components/Onboarding";
 import { LabConfig } from "./types";
+import { getTheme, ThemeId } from "./themes";
 
 const CONFIG_VERSION = 2;
 
@@ -37,9 +38,26 @@ function getRunMode(): "server" | "wasm" {
   return "server";
 }
 
+function loadTheme(): ThemeId {
+  try {
+    const t = localStorage.getItem("ssh-lab-theme") as ThemeId | null;
+    if (t === "monochrome" || t === "terminal" || t === "ocean") return t;
+  } catch {}
+  return "monochrome";
+}
+
+const themes: { id: ThemeId; label: string }[] = [
+  { id: "monochrome", label: "BW" },
+  { id: "terminal", label: "Term" },
+  { id: "ocean", label: "Ocean" },
+];
+
 export default function App() {
   const [config, setConfig] = useState<LabConfig | null>(loadConfig);
+  const [themeId, setThemeId] = useState<ThemeId>(loadTheme);
   const mode = useMemo(getRunMode, []);
+
+  const theme = useMemo(() => getTheme(themeId), [themeId]);
 
   const sshHooks = mode === "wasm" ? useWasmSSH : useSSH;
   const { lines, services, connected, sendCommand, clearLines } =
@@ -47,6 +65,13 @@ export default function App() {
 
   const handleCommand = (cmd: string) => {
     sendCommand(cmd);
+  };
+
+  const switchTheme = () => {
+    const ids: ThemeId[] = ["monochrome", "terminal", "ocean"];
+    const next = ids[(ids.indexOf(themeId) + 1) % ids.length];
+    setThemeId(next);
+    localStorage.setItem("ssh-lab-theme", next);
   };
 
   if (!config) {
@@ -60,20 +85,49 @@ export default function App() {
     );
   }
 
+  // Inject CSS variables into document root
+  React.useEffect(() => {
+    const root = document.documentElement;
+    root.style.setProperty("--theme-bg", theme.bg);
+    root.style.setProperty("--theme-bg-alt", theme.bgAlt);
+    root.style.setProperty("--theme-bg-card", theme.bgCard);
+    root.style.setProperty("--theme-border", theme.border);
+    root.style.setProperty("--theme-text", theme.text);
+    root.style.setProperty("--theme-text-muted", theme.textMuted);
+    root.style.setProperty("--theme-text-dim", theme.textDim);
+    root.style.setProperty("--theme-accent", theme.accent);
+    root.style.setProperty("--theme-accent-err", theme.accentErr);
+    root.style.setProperty("--theme-cursor", theme.cursor);
+    root.style.setProperty("--theme-scrollbar", theme.scrollbar);
+
+    // Inject global theme stylesheet
+    const existing = document.getElementById("theme-styles");
+    if (existing) existing.remove();
+    const sheet = document.createElement("style");
+    sheet.id = "theme-styles";
+    sheet.textContent = `
+      * { scrollbar-color: var(--theme-scrollbar) transparent; }
+      ::-webkit-scrollbar { width: 4px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: var(--theme-scrollbar); border-radius: 2px; }
+    `;
+    document.head.appendChild(sheet);
+  }, [theme]);
+
   return (
     <div
       style={{
         height: "100vh",
         display: "flex",
         flexDirection: "column",
-        background: "#111",
+        background: theme.bg,
       }}
     >
       {/* App bar */}
       <div
         style={{
-          background: "#0a0a0a",
-          borderBottom: "1px solid #333",
+          background: theme.bgAlt,
+          borderBottom: `1px solid ${theme.border}`,
           padding: "10px 20px",
           display: "flex",
           alignItems: "center",
@@ -86,7 +140,7 @@ export default function App() {
             style={{
               fontSize: 13,
               fontWeight: 600,
-              color: "#ddd",
+              color: theme.accent,
               fontFamily: "system-ui, sans-serif",
               letterSpacing: "-0.01em",
             }}
@@ -94,16 +148,20 @@ export default function App() {
             ssh-lab
           </span>
           <span
-            style={{ fontSize: 11, color: "#666", fontFamily: "monospace" }}
+            style={{
+              fontSize: 11,
+              color: theme.textMuted,
+              fontFamily: "monospace",
+            }}
           >
             {config.hostname} · 10.0.0.42 · SSH Lab
           </span>
           <span
             style={{
               fontSize: 9,
-              color: "#555",
+              color: theme.textDim,
               fontFamily: "monospace",
-              border: "1px solid #333",
+              border: `1px solid ${theme.border}`,
               borderRadius: 3,
               padding: "1px 5px",
             }}
@@ -117,7 +175,7 @@ export default function App() {
             }}
             style={{
               fontSize: 10,
-              color: "#555",
+              color: theme.textDim,
               fontFamily: "monospace",
               cursor: "pointer",
               textDecoration: "underline",
@@ -127,17 +185,43 @@ export default function App() {
             reconfigure
           </span>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {/* Theme switcher */}
+          {themes.map((t) => (
+            <span
+              key={t.id}
+              onClick={() => {
+                setThemeId(t.id);
+                localStorage.setItem("ssh-lab-theme", t.id);
+              }}
+              style={{
+                fontSize: 9,
+                fontFamily: "monospace",
+                cursor: "pointer",
+                padding: "2px 6px",
+                borderRadius: 3,
+                border: `1px solid ${themeId === t.id ? theme.accent : theme.border}`,
+                color: themeId === t.id ? theme.accent : theme.textDim,
+                background: themeId === t.id ? theme.border : "transparent",
+              }}
+            >
+              {t.label}
+            </span>
+          ))}
           <div
             style={{
               width: 6,
               height: 6,
               borderRadius: "50%",
-              background: connected ? "#aaa" : "#666",
+              background: connected ? theme.accent : theme.accentErr,
             }}
           />
           <span
-            style={{ fontSize: 11, color: "#888", fontFamily: "monospace" }}
+            style={{
+              fontSize: 11,
+              color: theme.textMuted,
+              fontFamily: "monospace",
+            }}
           >
             {connected ? "connected" : "disconnected"}
           </span>
@@ -153,8 +237,9 @@ export default function App() {
           connected={connected}
           username={config.username}
           hostname={config.hostname}
+          theme={theme}
         />
-        <Sidebar services={services} connected={connected} />
+        <Sidebar services={services} connected={connected} theme={theme} />
       </div>
     </div>
   );

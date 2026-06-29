@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, KeyboardEvent } from "react";
 import { OutputLine, NanoFile } from "../hooks/useSSH";
+import { Theme } from "../themes";
 
 type Props = {
   lines: OutputLine[];
@@ -10,17 +11,20 @@ type Props = {
   hostname: string;
   nanoFile: NanoFile | null;
   setNanoFile: (file: NanoFile | null) => void;
+  theme: Theme;
 };
 
-const CLASS_COLORS: Record<string, string> = {
-  head: "#e0e0e0",
-  ok: "#c0c0c0",
-  err: "#ff6b6b",
-  warn: "#b0b0b0",
-  muted: "#888888",
-  prompt: "#e0e0e0",
-  "": "#d4d4d4",
-};
+function classColors(theme: Theme): Record<string, string> {
+  return {
+    head: theme.accent,
+    ok: theme.text,
+    err: theme.accentErr,
+    warn: theme.textMuted,
+    muted: theme.textMuted,
+    prompt: theme.accent,
+    "": theme.text,
+  };
+}
 
 export default function Terminal({
   lines,
@@ -31,6 +35,7 @@ export default function Terminal({
   hostname,
   nanoFile,
   setNanoFile,
+  theme,
 }: Props) {
   const outRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -42,7 +47,9 @@ export default function Terminal({
   const [nanoContent, setNanoContent] = useState("");
   const [nanoModified, setNanoModified] = useState(false);
   const [nanoStatus, setNanoStatus] = useState("");
-  const [nanoPrompt, setNanoPrompt] = useState<"none" | "exit-confirm" | "save-name">("none");
+  const [nanoPrompt, setNanoPrompt] = useState<
+    "none" | "exit-confirm" | "save-name"
+  >("none");
   const [nanoTempFilename, setNanoTempFilename] = useState("");
 
   useEffect(() => {
@@ -105,6 +112,7 @@ export default function Terminal({
 
       const commands = [
         "apt",
+        "tutorial",
         "cat",
         "chmod",
         "chown",
@@ -306,7 +314,9 @@ export default function Terminal({
   };
 
   if (nanoFile) {
-    const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const handleTextareaChange = (
+      e: React.ChangeEvent<HTMLTextAreaElement>,
+    ) => {
       setNanoContent(e.target.value);
       setNanoModified(e.target.value !== nanoFile.content);
     };
@@ -383,7 +393,10 @@ export default function Terminal({
           }}
         >
           <span>GNU nano 6.2</span>
-          <span>{nanoTempFilename}{nanoModified ? " *" : ""}</span>
+          <span>
+            {nanoTempFilename}
+            {nanoModified ? " *" : ""}
+          </span>
           <span></span>
         </div>
 
@@ -432,10 +445,46 @@ export default function Terminal({
           <div style={{ color: "#d4d4d4", minHeight: 18, fontWeight: 500 }}>
             {nanoPrompt === "exit-confirm" && (
               <span style={{ color: "#ff6b6b" }}>
-                Save modified buffer? (Answering "No" will discard changes.) [Y/N/Cancel]:{" "}
-                <button onClick={() => handlePromptResponse("y")} style={{ background: "#222", border: "1px solid #444", color: "#ccc", marginRight: 6, cursor: "pointer", padding: "1px 6px" }}>Yes</button>
-                <button onClick={() => handlePromptResponse("n")} style={{ background: "#222", border: "1px solid #444", color: "#ccc", marginRight: 6, cursor: "pointer", padding: "1px 6px" }}>No</button>
-                <button onClick={() => handlePromptResponse("cancel")} style={{ background: "#222", border: "1px solid #444", color: "#ccc", cursor: "pointer", padding: "1px 6px" }}>Cancel</button>
+                Save modified buffer? (Answering "No" will discard changes.)
+                [Y/N/Cancel]:{" "}
+                <button
+                  onClick={() => handlePromptResponse("y")}
+                  style={{
+                    background: "#222",
+                    border: "1px solid #444",
+                    color: "#ccc",
+                    marginRight: 6,
+                    cursor: "pointer",
+                    padding: "1px 6px",
+                  }}
+                >
+                  Yes
+                </button>
+                <button
+                  onClick={() => handlePromptResponse("n")}
+                  style={{
+                    background: "#222",
+                    border: "1px solid #444",
+                    color: "#ccc",
+                    marginRight: 6,
+                    cursor: "pointer",
+                    padding: "1px 6px",
+                  }}
+                >
+                  No
+                </button>
+                <button
+                  onClick={() => handlePromptResponse("cancel")}
+                  style={{
+                    background: "#222",
+                    border: "1px solid #444",
+                    color: "#ccc",
+                    cursor: "pointer",
+                    padding: "1px 6px",
+                  }}
+                >
+                  Cancel
+                </button>
               </span>
             )}
             {nanoPrompt === "save-name" && (
@@ -444,7 +493,14 @@ export default function Terminal({
                 <input
                   value={nanoTempFilename}
                   onChange={(e) => setNanoTempFilename(e.target.value)}
-                  style={{ background: "#222", border: "1px solid #444", color: "#d4d4d4", padding: "1px 4px", fontSize: 11, fontFamily: "inherit" }}
+                  style={{
+                    background: "#222",
+                    border: "1px solid #444",
+                    color: "#d4d4d4",
+                    padding: "1px 4px",
+                    fontSize: 11,
+                    fontFamily: "inherit",
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       handlePromptResponse("confirm");
@@ -453,11 +509,37 @@ export default function Terminal({
                     }
                   }}
                 />
-                <button onClick={() => handlePromptResponse("confirm")} style={{ background: "#222", border: "1px solid #444", color: "#ccc", marginLeft: 6, cursor: "pointer", padding: "1px 6px" }}>Write</button>
-                <button onClick={() => handlePromptResponse("cancel")} style={{ background: "#222", border: "1px solid #444", color: "#ccc", marginLeft: 6, cursor: "pointer", padding: "1px 6px" }}>Cancel</button>
+                <button
+                  onClick={() => handlePromptResponse("confirm")}
+                  style={{
+                    background: "#222",
+                    border: "1px solid #444",
+                    color: "#ccc",
+                    marginLeft: 6,
+                    cursor: "pointer",
+                    padding: "1px 6px",
+                  }}
+                >
+                  Write
+                </button>
+                <button
+                  onClick={() => handlePromptResponse("cancel")}
+                  style={{
+                    background: "#222",
+                    border: "1px solid #444",
+                    color: "#ccc",
+                    marginLeft: 6,
+                    cursor: "pointer",
+                    padding: "1px 6px",
+                  }}
+                >
+                  Cancel
+                </button>
               </span>
             )}
-            {nanoPrompt === "none" && (nanoStatus || `[ Read ${nanoContent.split("\n").length} lines ]`)}
+            {nanoPrompt === "none" &&
+              (nanoStatus ||
+                `[ Read ${nanoContent.split("\n").length} lines ]`)}
           </div>
 
           {/* Shortcuts Grid */}
@@ -471,10 +553,35 @@ export default function Terminal({
             }}
           >
             <div onClick={handleNanoExit} style={{ cursor: "pointer" }}>
-              <span style={{ background: "#ccc", color: "#111", padding: "0px 3px", marginRight: 4, fontWeight: "bold" }}>^X</span> Exit
+              <span
+                style={{
+                  background: "#ccc",
+                  color: "#111",
+                  padding: "0px 3px",
+                  marginRight: 4,
+                  fontWeight: "bold",
+                }}
+              >
+                ^X
+              </span>{" "}
+              Exit
             </div>
-            <div onClick={() => setNanoPrompt("save-name")} style={{ cursor: "pointer" }}>
-              <span style={{ background: "#ccc", color: "#111", padding: "0px 3px", marginRight: 4, fontWeight: "bold" }}>^O</span> WriteOut
+            <div
+              onClick={() => setNanoPrompt("save-name")}
+              style={{ cursor: "pointer" }}
+            >
+              <span
+                style={{
+                  background: "#ccc",
+                  color: "#111",
+                  padding: "0px 3px",
+                  marginRight: 4,
+                  fontWeight: "bold",
+                }}
+              >
+                ^O
+              </span>{" "}
+              WriteOut
             </div>
           </div>
         </div>
@@ -490,7 +597,7 @@ export default function Terminal({
         flex: 1,
         display: "flex",
         flexDirection: "column",
-        background: "#111",
+        background: theme.bg,
         overflow: "hidden",
       }}
       onClick={() => inputRef.current?.focus()}
@@ -633,7 +740,7 @@ export default function Terminal({
       <style>{`
         @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
         ::-webkit-scrollbar { width: 4px; }
-        ::-webkit-scrollbar-thumb { background: #444; border-radius: 2px; }
+        ::-webkit-scrollbar-thumb { background: var(--theme-scrollbar, #444); border-radius: 2px; }
       `}</style>
     </div>
   );

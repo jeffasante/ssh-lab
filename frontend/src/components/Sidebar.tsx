@@ -17,8 +17,8 @@ export default function Sidebar({ services, connected }: Props) {
   return (
     <aside
       style={{
-        background: "#1a1a1a",
-        borderLeft: "1px solid #333",
+        background: "var(--theme-bg-card, #1a1a1a)",
+        borderLeft: "1px solid var(--theme-border, #333)",
         display: "flex",
         flexDirection: "column",
         width: 210,
