@@ -5,7 +5,6 @@ package main
 import (
 	"encoding/json"
 	"log"
-	"math"
 	"math/rand"
 	"net/http"
 	"time"
@@ -18,13 +17,9 @@ type WSMessage struct {
 	Payload interface{} `json:"payload"`
 }
 
-// ── WebSocket upgrader ────────────────────────────────────────────────────────
-
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool { return true },
 }
-
-// WebSocket handler
 
 func wsHandler(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
@@ -47,8 +42,8 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 			state.mu.Lock()
 			for _, s := range state.Services {
 				if s.Running {
-					s.CPU = math.Round(randFloat(0.05, 3.5)*10) / 10
-					s.MemMB = math.Round(s.MemMB*(0.98+rand.Float64()*0.04)*10) / 10
+					s.CPU = randFloat(0.05, 3.5)
+					s.MemMB = randFloat(8, 145)
 				}
 			}
 			snap := serviceSnapshot()
@@ -85,8 +80,6 @@ func sendJSON(conn *websocket.Conn, v interface{}) error {
 	b, _ := json.Marshal(v)
 	return conn.WriteMessage(websocket.TextMessage, b)
 }
-
-// Main
 
 func main() {
 	rand.Seed(time.Now().UnixNano())
