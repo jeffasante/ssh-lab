@@ -26,12 +26,19 @@ type CommandResponse = {
   services: Record<string, ServiceInfo>;
 };
 
+export type NanoFile = {
+  filename: string;
+  content: string;
+};
+
 type UseSSHReturn = {
   lines: OutputLine[];
   services: Record<string, ServiceInfo>;
   connected: boolean;
   sendCommand: (cmd: string) => void;
   clearLines: () => void;
+  nanoFile: NanoFile | null;
+  setNanoFile: (file: NanoFile | null) => void;
 };
 
 const WS_URL = `ws://${window.location.host}/ws`;
@@ -42,6 +49,7 @@ export function useSSH(config: LabConfig | null): UseSSHReturn {
   const [connected, setConnected] = useState(false);
   const [lines, setLines] = useState<OutputLine[]>([]);
   const [services, setServices] = useState<Record<string, ServiceInfo>>({});
+  const [nanoFile, setNanoFile] = useState<NanoFile | null>(null);
   const inited = useRef(false);
 
   const appendLines = useCallback((newLines: OutputLine[]) => {
@@ -99,6 +107,9 @@ export function useSSH(config: LabConfig | null): UseSSHReturn {
           setServices(msg.payload as Record<string, ServiceInfo>);
         } else if (msg.type === "output") {
           const resp = msg.payload as CommandResponse;
+          if (resp.nano) {
+            setNanoFile(resp.nano);
+          }
           if (resp.lines) appendLines(resp.lines);
           if (resp.services) setServices(resp.services);
         }
@@ -115,9 +126,13 @@ export function useSSH(config: LabConfig | null): UseSSHReturn {
 
   const sendCommand = useCallback((cmd: string) => {
     if (ws.current?.readyState === WebSocket.OPEN) {
+      if (!cmd.startsWith("__")) {
+        const promptText = `${config?.username || "jeff"}@${config?.hostname || "server-a1b2"}:~$ ${cmd}`;
+        appendLines([{ text: promptText, class: "prompt" }]);
+      }
       ws.current.send(JSON.stringify({ command: cmd }));
     }
-  }, []);
+  }, [config, appendLines]);
 
-  return { lines, services, connected, sendCommand, clearLines };
+  return { lines, services, connected, sendCommand, clearLines, nanoFile, setNanoFile };
 }

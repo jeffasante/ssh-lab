@@ -1,5 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { useSSH } from "./hooks/useSSH";
+import { useWasmSSH } from "./hooks/useWasmSSH";
 import Terminal from "./components/Terminal";
 import Sidebar from "./components/Sidebar";
 import Onboarding from "./components/Onboarding";
@@ -12,7 +13,6 @@ function loadConfig(): LabConfig | null {
     const raw = localStorage.getItem("ssh-lab-config");
     if (!raw) return null;
     const cfg = JSON.parse(raw);
-    // Stale config from an older version → force re-onboarding
     if (cfg._version !== CONFIG_VERSION) return null;
     if (cfg.hostname && cfg.hostname.includes("ecg")) return null;
     return cfg;
@@ -27,11 +27,23 @@ function saveConfig(config: LabConfig) {
   );
 }
 
+function getRunMode(): "server" | "wasm" {
+  if (typeof window === "undefined") return "server";
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("mode") === "wasm") return "wasm";
+  if (params.get("server") === "1") return "server";
+  const stored = localStorage.getItem("ssh-lab-mode");
+  if (stored === "wasm" || stored === "server") return stored;
+  return "server";
+}
+
 export default function App() {
   const [config, setConfig] = useState<LabConfig | null>(loadConfig);
+  const mode = useMemo(getRunMode, []);
 
+  const sshHooks = mode === "wasm" ? useWasmSSH : useSSH;
   const { lines, services, connected, sendCommand, clearLines } =
-    useSSH(config);
+    sshHooks(config);
 
   const handleCommand = (cmd: string) => {
     sendCommand(cmd);
@@ -85,6 +97,18 @@ export default function App() {
             style={{ fontSize: 11, color: "#666", fontFamily: "monospace" }}
           >
             {config.hostname} · 10.0.0.42 · SSH Lab
+          </span>
+          <span
+            style={{
+              fontSize: 9,
+              color: "#555",
+              fontFamily: "monospace",
+              border: "1px solid #333",
+              borderRadius: 3,
+              padding: "1px 5px",
+            }}
+          >
+            {mode}
           </span>
           <span
             onClick={() => {

@@ -2,7 +2,7 @@ FROM golang:1.21-alpine AS build
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
-COPY main.go .
+COPY *.go .
 RUN CGO_ENABLED=0 go build -o ssh-lab-server .
 
 FROM alpine:3.19

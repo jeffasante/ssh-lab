@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, KeyboardEvent } from "react";
-import { OutputLine } from "../hooks/useSSH";
+import { OutputLine, NanoFile } from "../hooks/useSSH";
 
 type Props = {
   lines: OutputLine[];
@@ -8,6 +8,8 @@ type Props = {
   connected: boolean;
   username: string;
   hostname: string;
+  nanoFile: NanoFile | null;
+  setNanoFile: (file: NanoFile | null) => void;
 };
 
 const CLASS_COLORS: Record<string, string> = {
@@ -27,6 +29,8 @@ export default function Terminal({
   connected,
   username,
   hostname,
+  nanoFile,
+  setNanoFile,
 }: Props) {
   const outRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -34,6 +38,22 @@ export default function Terminal({
   const [history, setHistory] = useState<string[]>([]);
   const [histIdx, setHistIdx] = useState(-1);
   const [exited, setExited] = useState(false);
+
+  const [nanoContent, setNanoContent] = useState("");
+  const [nanoModified, setNanoModified] = useState(false);
+  const [nanoStatus, setNanoStatus] = useState("");
+  const [nanoPrompt, setNanoPrompt] = useState<"none" | "exit-confirm" | "save-name">("none");
+  const [nanoTempFilename, setNanoTempFilename] = useState("");
+
+  useEffect(() => {
+    if (nanoFile) {
+      setNanoContent(nanoFile.content);
+      setNanoModified(false);
+      setNanoStatus("");
+      setNanoPrompt("none");
+      setNanoTempFilename(nanoFile.filename);
+    }
+  }, [nanoFile]);
 
   useEffect(() => {
     if (outRef.current) {
@@ -195,6 +215,7 @@ export default function Terminal({
         ];
       } else {
         const first = parts[0].toLowerCase();
+
         if (["systemctl", "service"].includes(first)) {
           if (parts.length === 2) {
             candidates = [...services, ...sysctlSubs];
@@ -213,12 +234,66 @@ export default function Terminal({
         } else if (first === "cat" || first === "./health-check.sh") {
           candidates = files;
         } else if (first === "curl") {
-          candidates = services.map(
-            (s) =>
-              `localhost:${["nginx", "postgresql", "redis", "node-api", "prometheus", "alertmanager", "node-exporter"].indexOf(s) === 0 ? 80 : ["nginx", "postgresql", "redis", "node-api", "prometheus", "alertmanager", "node-exporter"].indexOf(s) === 1 ? 5432 : ["nginx", "postgresql", "redis", "node-api", "prometheus", "alertmanager", "node-exporter"].indexOf(s) === 2 ? 6379 : ["nginx", "postgresql", "redis", "node-api", "prometheus", "alertmanager", "node-exporter"].indexOf(s) === 3 ? 3000 : ["nginx", "postgresql", "redis", "node-api", "prometheus", "alertmanager", "node-exporter"].indexOf(s) === 4 ? 9090 : ["nginx", "postgresql", "redis", "node-api", "prometheus", "alertmanager", "node-exporter"].indexOf(s) === 5 ? 9093 : 9100}`,
-          );
+          const portMap: Record<string, number> = {
+            nginx: 80,
+            postgresql: 5432,
+            redis: 6379,
+            "node-api": 3000,
+            prometheus: 9090,
+            alertmanager: 9093,
+            "node-exporter": 9100,
+          };
+          candidates = services.map((s) => `localhost:${portMap[s] ?? 80}`);
         } else if (first === "sudo") {
           candidates = commands;
+        } else if (first === "docker") {
+          if (parts.length === 2) {
+            candidates = ["ps", "logs", "stats", "images", "compose"];
+          } else if (parts.length === 3) {
+            const sub = parts[1].toLowerCase();
+            if (sub === "compose") candidates = ["up", "down", "ps", "logs"];
+            else if (["logs", "stats"].includes(sub)) candidates = services;
+          }
+        } else if (first === "apt" || first === "apt-get") {
+          if (parts.length === 2) {
+            candidates = [
+              "list",
+              "install",
+              "update",
+              "upgrade",
+              "search",
+              "remove",
+              "purge",
+            ];
+          } else if (parts.length === 3 && parts[1] === "install") {
+            candidates = [
+              "curl",
+              "wget",
+              "nginx",
+              "postgresql",
+              "redis",
+              "prometheus",
+              "git",
+              "vim",
+              "nano",
+              "htop",
+              "iftop",
+              "netcat-openbsd",
+              "ngnix",
+              "apt-transport-https",
+              "ca-certificates",
+            ];
+          }
+        } else if (first === "ip") {
+          if (parts.length === 2) {
+            candidates = ["addr", "route", "link", "neigh", "netns"];
+          }
+        } else if (
+          first === "kill" ||
+          first === "killall" ||
+          first === "pkill"
+        ) {
+          candidates = services;
         }
       }
 
@@ -229,6 +304,183 @@ export default function Terminal({
       }
     }
   };
+
+  if (nanoFile) {
+    const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      setNanoContent(e.target.value);
+      setNanoModified(e.target.value !== nanoFile.content);
+    };
+
+    const handleNanoSave = () => {
+      let b64 = "";
+      try {
+        const bytes = new TextEncoder().encode(nanoContent);
+        let binString = "";
+        for (let i = 0; i < bytes.byteLength; i++) {
+          binString += String.fromCharCode(bytes[i]);
+        }
+        b64 = btoa(binString);
+      } catch (err) {
+        b64 = btoa(nanoContent);
+      }
+      onCommand(`__writefile ${nanoTempFilename} ${b64}`);
+      const lineCount = nanoContent.split("\n").length;
+      setNanoStatus(`[ Wrote ${lineCount} lines ]`);
+      setNanoModified(false);
+      setTimeout(() => {
+        setNanoStatus("");
+      }, 2000);
+    };
+
+    const handleNanoExit = () => {
+      if (nanoModified) {
+        setNanoPrompt("exit-confirm");
+      } else {
+        setNanoFile(null);
+      }
+    };
+
+    const handlePromptResponse = (key: string) => {
+      if (nanoPrompt === "exit-confirm") {
+        if (key.toLowerCase() === "y") {
+          setNanoPrompt("save-name");
+        } else if (key.toLowerCase() === "n") {
+          setNanoFile(null);
+        } else if (key === "cancel") {
+          setNanoPrompt("none");
+        }
+      } else if (nanoPrompt === "save-name") {
+        if (key === "confirm") {
+          handleNanoSave();
+          setNanoFile(null);
+        } else if (key === "cancel") {
+          setNanoPrompt("none");
+        }
+      }
+    };
+
+    return (
+      <div
+        style={{
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          background: "#111",
+          overflow: "hidden",
+          fontFamily: "'SF Mono','Fira Code','Cascadia Code',monospace",
+        }}
+      >
+        {/* Nano header */}
+        <div
+          style={{
+            background: "#1a1a1a",
+            borderBottom: "1px solid #333",
+            padding: "8px 14px",
+            display: "flex",
+            justifyContent: "space-between",
+            fontSize: 12,
+            color: "#aaa",
+          }}
+        >
+          <span>GNU nano 6.2</span>
+          <span>{nanoTempFilename}{nanoModified ? " *" : ""}</span>
+          <span></span>
+        </div>
+
+        {/* Text area for editing */}
+        <textarea
+          value={nanoContent}
+          onChange={handleTextareaChange}
+          autoFocus
+          spellCheck={false}
+          style={{
+            flex: 1,
+            background: "#111",
+            color: "#d4d4d4",
+            border: "none",
+            padding: "12px 16px",
+            fontFamily: "inherit",
+            fontSize: 12.5,
+            lineHeight: 1.65,
+            resize: "none",
+            outline: "none",
+          }}
+          onKeyDown={(e) => {
+            if (e.ctrlKey && e.key === "x") {
+              e.preventDefault();
+              handleNanoExit();
+            } else if (e.ctrlKey && e.key === "o") {
+              e.preventDefault();
+              setNanoPrompt("save-name");
+            }
+          }}
+        />
+
+        {/* Nano footer */}
+        <div
+          style={{
+            background: "#1a1a1a",
+            borderTop: "1px solid #333",
+            padding: "10px 14px",
+            fontSize: 12,
+            display: "flex",
+            flexDirection: "column",
+            gap: 8,
+          }}
+        >
+          {/* Status or Prompt line */}
+          <div style={{ color: "#d4d4d4", minHeight: 18, fontWeight: 500 }}>
+            {nanoPrompt === "exit-confirm" && (
+              <span style={{ color: "#ff6b6b" }}>
+                Save modified buffer? (Answering "No" will discard changes.) [Y/N/Cancel]:{" "}
+                <button onClick={() => handlePromptResponse("y")} style={{ background: "#222", border: "1px solid #444", color: "#ccc", marginRight: 6, cursor: "pointer", padding: "1px 6px" }}>Yes</button>
+                <button onClick={() => handlePromptResponse("n")} style={{ background: "#222", border: "1px solid #444", color: "#ccc", marginRight: 6, cursor: "pointer", padding: "1px 6px" }}>No</button>
+                <button onClick={() => handlePromptResponse("cancel")} style={{ background: "#222", border: "1px solid #444", color: "#ccc", cursor: "pointer", padding: "1px 6px" }}>Cancel</button>
+              </span>
+            )}
+            {nanoPrompt === "save-name" && (
+              <span>
+                File Name to Write:{" "}
+                <input
+                  value={nanoTempFilename}
+                  onChange={(e) => setNanoTempFilename(e.target.value)}
+                  style={{ background: "#222", border: "1px solid #444", color: "#d4d4d4", padding: "1px 4px", fontSize: 11, fontFamily: "inherit" }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      handlePromptResponse("confirm");
+                    } else if (e.key === "Escape") {
+                      handlePromptResponse("cancel");
+                    }
+                  }}
+                />
+                <button onClick={() => handlePromptResponse("confirm")} style={{ background: "#222", border: "1px solid #444", color: "#ccc", marginLeft: 6, cursor: "pointer", padding: "1px 6px" }}>Write</button>
+                <button onClick={() => handlePromptResponse("cancel")} style={{ background: "#222", border: "1px solid #444", color: "#ccc", marginLeft: 6, cursor: "pointer", padding: "1px 6px" }}>Cancel</button>
+              </span>
+            )}
+            {nanoPrompt === "none" && (nanoStatus || `[ Read ${nanoContent.split("\n").length} lines ]`)}
+          </div>
+
+          {/* Shortcuts Grid */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(6, 1fr)",
+              gap: "6px 12px",
+              color: "#aaa",
+              fontSize: 11.5,
+            }}
+          >
+            <div onClick={handleNanoExit} style={{ cursor: "pointer" }}>
+              <span style={{ background: "#ccc", color: "#111", padding: "0px 3px", marginRight: 4, fontWeight: "bold" }}>^X</span> Exit
+            </div>
+            <div onClick={() => setNanoPrompt("save-name")} style={{ cursor: "pointer" }}>
+              <span style={{ background: "#ccc", color: "#111", padding: "0px 3px", marginRight: 4, fontWeight: "bold" }}>^O</span> WriteOut
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const promptLabel = `${username}@${hostname}:~$`;
 
