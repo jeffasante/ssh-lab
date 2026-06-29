@@ -3,8 +3,6 @@ server/ssh-lab-server
 server/main
 *.exe
 server/*.wasm
-frontend/public/ssh-lab.wasm
-frontend/public/wasm_exec.js
 
 # Node
 frontend/node_modules/
