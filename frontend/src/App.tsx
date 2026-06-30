@@ -184,6 +184,17 @@ export default function App() {
           >
             reconfigure
           </span>
+          <span
+            onClick={() => sendCommand("tutorial")}
+            style={{
+              fontSize: 10,
+              color: theme.accent,
+              fontFamily: "monospace",
+              cursor: "pointer",
+            }}
+          >
+            [tutorial]
+          </span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {/* Theme switcher */}

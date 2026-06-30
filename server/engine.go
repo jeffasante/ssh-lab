@@ -301,6 +301,8 @@ docker:x:998:%s
 			return "PRETTY_NAME=\"Red Hat Enterprise Linux 9.4 (Plow)\"\nNAME=\"Red Hat Enterprise Linux\"\nVERSION_ID=\"9.4\"\nID=rhel\nID_LIKE=\"fedora\"\n", true
 		case "alpine":
 			return "PRETTY_NAME=\"Alpine Linux 3.19\"\nNAME=\"Alpine Linux\"\nVERSION_ID=\"3.19\"\nID=alpine\n", true
+		case "windows":
+			return "PRETTY_NAME=\"Windows Server 2022 Datacenter\"\nNAME=\"Windows Server\"\nVERSION_ID=\"10.0.20348\"\nID=windows\n", true
 		default:
 			return "PRETTY_NAME=\"Ubuntu 22.04.3 LTS\"\nNAME=\"Ubuntu\"\nVERSION_ID=\"22.04\"\nVERSION=\"22.04.3 LTS (Jammy Jellyfish)\"\nID=ubuntu\nID_LIKE=debian\n", true
 		}
@@ -993,11 +995,17 @@ func handleCommand(raw string) CommandResponse {
 			unameStr = "Linux " + currentHostname + " 5.14.0-427.el9.x86_64 #1 SMP PREEMPT_DYNAMIC Wed May 8 06:51:38 EDT 2024 x86_64 x86_64 x86_64 GNU/Linux"
 		case "alpine":
 			unameStr = "Linux " + currentHostname + " 6.6.30-0-virt #1-Alpine SMP PREEMPT_DYNAMIC Mon May 6 10:47:07 UTC 2024 x86_64 Linux"
+		case "windows":
+			unameStr = "Microsoft Windows [Version 10.0.20348.2655]"
 		}
 		lines = append(lines, line(unameStr, ""), blank())
 
 	case "pwd":
-		lines = append(lines, line(fmt.Sprintf("/home/%s", currentUser), ""), blank())
+		pwdStr := fmt.Sprintf("/home/%s", currentUser)
+		if currentOS == "windows" {
+			pwdStr = fmt.Sprintf("C:\\Users\\%s", currentUser)
+		}
+		lines = append(lines, line(pwdStr, ""), blank())
 
 	case "ls":
 		la := false

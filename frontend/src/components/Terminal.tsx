@@ -252,6 +252,10 @@ export default function Terminal({
             "node-exporter": 9100,
           };
           candidates = services.map((s) => `localhost:${portMap[s] ?? 80}`);
+        } else if (first === "tutorial") {
+          if (parts.length === 2) {
+            candidates = ["systemctl", "docker", "curl", "basic"];
+          }
         } else if (first === "sudo") {
           candidates = commands;
         } else if (first === "docker") {
