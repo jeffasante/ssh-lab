@@ -64,11 +64,18 @@ class InputFd extends Fd {
   }
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes >= 1000000000) return (bytes / 1000000000).toFixed(1) + " GB";
+  if (bytes >= 1000000) return (bytes / 1000000).toFixed(1) + " MB";
+  if (bytes >= 1000) return (bytes / 1000).toFixed(0) + " KB";
+  return bytes + " B";
+}
+
 async function loadC2WImage(
   url: string,
   onOutput: (chunk: string) => void,
 ): Promise<C2WInstance> {
-  // First try loading from the provided URL (either local or remote)
+  // Try fetching with progress tracking
   const resp = await fetch(url).catch(() => null);
   if (!resp || !resp.ok) {
     onOutput(`Failed to fetch ${url}\n`);
@@ -79,6 +86,47 @@ async function loadC2WImage(
     );
     throw new Error("Image not found");
   }
+
+  const total = parseInt(resp.headers.get("content-length") || "0", 10);
+  const reader = resp.body!.getReader();
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+
+  onOutput(`Loading container image (${formatBytes(total)})...\n`);
+
+  // Read all chunks with progress
+  let dots = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    received += value.length;
+    const pct = total > 0 ? Math.round((received / total) * 100) : 0;
+    dots++;
+    if (dots % 30 === 0 || pct === 100) {
+      const bar =
+        "[" +
+        "#".repeat(Math.floor(pct / 5)) +
+        "-".repeat(20 - Math.floor(pct / 5)) +
+        "]";
+      onOutput(bar + " " + pct + "%  " + formatBytes(received) + "\n");
+    }
+  }
+
+  onOutput("[" + "#".repeat(20) + "] 100% " + formatBytes(total) + "\n");
+
+  onOutput("\nStarting kernel...\n");
+
+  // Concatenate all chunks into one buffer
+  const totalLen = chunks.reduce((a, c) => a + c.length, 0);
+  const buf = new Uint8Array(totalLen);
+  let offset = 0;
+  for (const chunk of chunks) {
+    buf.set(chunk, offset);
+    offset += chunk.length;
+  }
+
+  onOutput("Initializing WASM runtime...\n");
 
   // Create custom Fds for stdio
   const inputFd = new InputFd();
@@ -93,8 +141,7 @@ async function loadC2WImage(
     ],
   );
 
-  // Fetch and instantiate the .wasm
-  const buf = await resp.arrayBuffer();
+  // Instantiate from the pre-loaded buffer
   const wasm = await WebAssembly.instantiate(buf, {
     wasi_snapshot_preview1: wasi.wasiImport,
   });
