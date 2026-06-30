@@ -60,8 +60,15 @@ export default function App() {
   const theme = useMemo(() => getTheme(themeId), [themeId]);
 
   const sshHooks = mode === "wasm" ? useWasmSSH : useSSH;
-  const { lines, services, connected, sendCommand, clearLines } =
-    sshHooks(config);
+  const {
+    lines,
+    services,
+    connected,
+    sendCommand,
+    clearLines,
+    nanoFile,
+    setNanoFile,
+  } = sshHooks(config);
 
   const handleCommand = (cmd: string) => {
     sendCommand(cmd);
@@ -248,6 +255,8 @@ export default function App() {
           connected={connected}
           username={config.username}
           hostname={config.hostname}
+          nanoFile={nanoFile}
+          setNanoFile={setNanoFile}
           theme={theme}
         />
         <Sidebar services={services} connected={connected} theme={theme} />

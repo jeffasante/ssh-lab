@@ -3,14 +3,35 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
 	"log"
 	"math/rand"
 	"net/http"
+	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
 )
+
+func init() {
+	runRealPing = func(host string) ([]string, error) {
+		cmd := exec.Command("ping", "-c", "3", "-W", "2", host)
+		var out bytes.Buffer
+		cmd.Stdout = &out
+		cmd.Stderr = &out
+		if err := cmd.Run(); err != nil {
+			return nil, err
+		}
+		raw := strings.TrimSpace(out.String())
+		if raw == "" {
+			return nil, fmt.Errorf("empty ping output")
+		}
+		return strings.Split(raw, "\n"), nil
+	}
+}
 
 type WSMessage struct {
 	Type    string      `json:"type"`

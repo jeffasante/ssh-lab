@@ -9,8 +9,8 @@ type Props = {
   connected: boolean;
   username: string;
   hostname: string;
-  nanoFile: NanoFile | null;
-  setNanoFile: (file: NanoFile | null) => void;
+  nanoFile?: NanoFile | null;
+  setNanoFile?: (file: NanoFile | null) => void;
   theme: Theme;
 };
 

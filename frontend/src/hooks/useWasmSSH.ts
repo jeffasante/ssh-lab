@@ -7,12 +7,19 @@ type CommandResponse = {
   services: Record<string, ServiceInfo>;
 };
 
+export type NanoFile = {
+  filename: string;
+  content: string;
+};
+
 type UseSSHReturn = {
   lines: OutputLine[];
   services: Record<string, ServiceInfo>;
   connected: boolean;
   sendCommand: (cmd: string) => void;
   clearLines: () => void;
+  nanoFile: NanoFile | null;
+  setNanoFile: (file: NanoFile | null) => void;
 };
 
 declare global {
@@ -36,10 +43,13 @@ async function loadWasm(): Promise<void> {
 }
 
 export function useWasmSSH(config: LabConfig | null): UseSSHReturn {
+  const ws = useRef<WebSocket | null>(null);
   const [connected, setConnected] = useState(false);
   const [lines, setLines] = useState<OutputLine[]>([]);
   const [services, setServices] = useState<Record<string, ServiceInfo>>({});
+  const [nanoFile, setNanoFile] = useState<NanoFile | null>(null);
   const initDone = useRef(false);
+  void ws; // keep unused ref for hook parity
 
   const appendLines = useCallback((newLines: OutputLine[]) => {
     setLines((prev) => [...prev, ...newLines]);
@@ -107,5 +117,13 @@ export function useWasmSSH(config: LabConfig | null): UseSSHReturn {
     [appendLines],
   );
 
-  return { lines, services, connected, sendCommand, clearLines };
+  return {
+    lines,
+    services,
+    connected,
+    sendCommand,
+    clearLines,
+    nanoFile,
+    setNanoFile,
+  };
 }

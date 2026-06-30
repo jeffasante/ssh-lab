@@ -92,12 +92,12 @@ var (
 	diskPct         = 43
 )
 
-// ── Virtual filesystem ────────────────────────────────────────────────────────
+// Virtual filesystem
 
 var userFiles = map[string]string{}
 var userDirs = map[string]bool{}
 
-// ── Docker simulation ─────────────────────────────────────────────────────────
+// Docker simulation
 
 type DockerContainer struct {
 	ID      string
@@ -129,8 +129,7 @@ var dockerImages = [][4]string{
 	{"prom/node-exporter", "v1.7", "a7b8c9d0e1f2", "23.1MB"},
 }
 
-// ── Environment variables ─────────────────────────────────────────────────────
-
+// Environment variables
 var envVars = map[string]string{
 	"SHELL":          "/bin/bash",
 	"TERM":           "xterm-256color",
@@ -148,7 +147,7 @@ var envVars = map[string]string{
 	"PGDATA":         "/var/lib/postgresql/15/main",
 }
 
-// ── Helpersunc line(text, class string) OutputLine { return OutputLine{Text: text, Class: class} }
+// Helpersunc line(text, class string) OutputLine { return OutputLine{Text: text, Class: class} }
 func line(text, class string) OutputLine { return OutputLine{Text: text, Class: class} }
 
 func blank() OutputLine { return OutputLine{Text: "", Class: ""} }
@@ -195,7 +194,7 @@ func cpuLoad() string {
 }
 func memUsed() string { return fmt.Sprintf("%.1f", totalMemG*0.35+rand.Float64()*0.3) }
 
-// ── Virtual file content ──────────────────────────────────────────────────────
+// Virtual file content
 
 func getFileContent(path string) (string, bool) {
 	// Normalize path
@@ -614,8 +613,7 @@ volumes:
 	return "", false
 }
 
-// ── ls directory listings ─────────────────────────────────────────────────────
-
+// ls directory listings
 func lsDir(dir string, long bool) []OutputLine {
 	var lines []OutputLine
 
@@ -695,7 +693,10 @@ func lsDir(dir string, long bool) []OutputLine {
 	return lines
 }
 
-// ── Command engine
+// Real ping support (set by server main.go) \
+var runRealPing func(host string) ([]string, error)
+
+// Command engine
 
 func handleCommand(raw string) CommandResponse {
 	raw = strings.TrimSpace(raw)
@@ -712,7 +713,7 @@ func handleCommand(raw string) CommandResponse {
 		state.mu.Unlock()
 	}
 
-	// ── Pipe support ──────────────────────────────────────────────────────
+	// Pipe support
 	if strings.Contains(raw, " | ") {
 		pipeParts := strings.SplitN(raw, " | ", 2)
 		leftCmd := strings.TrimSpace(pipeParts[0])
@@ -843,7 +844,7 @@ func handleCommand(raw string) CommandResponse {
 		}
 	}
 
-	// ── Output redirection ────────────────────────────────────────────────
+	// Output redirection \────────────────
 	if strings.Contains(raw, " >> ") {
 		rParts := strings.SplitN(raw, " >> ", 2)
 		cmdPart := strings.TrimSpace(rParts[0])
@@ -1140,6 +1141,28 @@ func handleCommand(raw string) CommandResponse {
 		if len(args) > 0 {
 			host = args[0]
 		}
+
+		// Try real ping in server mode
+		if runRealPing != nil {
+			out, err := runRealPing(host)
+			if err == nil {
+				for _, l := range out {
+					cls := "muted"
+					if strings.Contains(l, "bytes from") {
+						cls = "ok"
+					} else if strings.Contains(l, "packets transmitted") {
+						cls = "ok"
+					} else if strings.Contains(l, "rtt min/avg") {
+						cls = "muted"
+					}
+					lines = append(lines, line(l, cls))
+				}
+				lines = append(lines, blank())
+				break
+			}
+		}
+
+		// Fallback simulation
 		ms1 := randFloat(0.3, 0.6)
 		ms2 := randFloat(0.3, 0.6)
 		ms3 := randFloat(0.3, 0.6)
@@ -1151,18 +1174,6 @@ func handleCommand(raw string) CommandResponse {
 			line(fmt.Sprintf("--- %s ping statistics ---", host), "muted"),
 			line(fmt.Sprintf("3 packets transmitted, 3 received, 0%% packet loss, time 2003ms"), "ok"),
 			line(fmt.Sprintf("rtt min/avg/max/mdev = %.3f/%.3f/%.3f/%.3f ms", ms1, (ms1+ms2+ms3)/3, ms3, math.Abs(ms3-ms1)), "muted"),
-			blank(),
-		)
-
-	case "df":
-		usedG := int(float64(diskPct) * 0.98)
-		freeG := 98 - usedG
-		lines = append(lines,
-			line("Filesystem      Size  Used Avail Use% Mounted on", "head"),
-			line(fmt.Sprintf("/dev/sda1        98G  %dG   %dG  %d%% /", usedG, freeG, diskPct), "ok"),
-			line("tmpfs           3.9G  1.2M  3.9G   1% /dev/shm", "muted"),
-			line("/dev/sdb1       200G  112G   82G  58% /var/lib/postgresql", "muted"),
-			line("overlay          98G   40G   54G  43% /var/lib/docker", "muted"),
 			blank(),
 		)
 
@@ -1822,7 +1833,7 @@ func handleCommand(raw string) CommandResponse {
 	case "ssh":
 		lines = append(lines, line("ssh: lab mode — already on the target host.", "warn"), blank())
 
-	// ── NEW COMMANDS ──────────────────────────────────────────────────────
+	// NEW COMMANDS
 
 	case "date":
 		lines = append(lines, line(time.Now().Format("Mon Jan  2 15:04:05 MST 2006"), ""), blank())
@@ -1949,7 +1960,7 @@ func handleCommand(raw string) CommandResponse {
 			blank(),
 		)
 
-	// ── Docker
+	// Docker
 
 	case "docker":
 		sub := ""
@@ -2095,7 +2106,7 @@ func handleCommand(raw string) CommandResponse {
 			lines = append(lines, line(fmt.Sprintf("docker: '%s' is not a docker command.", sub), "err"), blank())
 		}
 
-	// ── Networking ────────────────────────────────────────────────────────
+	// Networking ──
 
 	case "ip":
 		sub := ""
@@ -2273,7 +2284,7 @@ func handleCommand(raw string) CommandResponse {
 			userFiles[filename] = fmt.Sprintf("<!-- Downloaded from %s -->\n<html><body>OK</body></html>\n", url)
 		}
 
-	// ── Package management ────────────────────────────────────────────────
+	// Package management \────────────────
 
 	case "apt", "apt-get":
 		sub := ""
@@ -2408,7 +2419,7 @@ func handleCommand(raw string) CommandResponse {
 			lines = append(lines, line("bash: yum: command not found (try: apt)", "err"), blank())
 		}
 
-	// ── File operations ───────────────────────────────────────────────────
+	// File operations \───────────────────
 
 	case "touch":
 		if len(args) == 0 {
@@ -2600,7 +2611,7 @@ func handleCommand(raw string) CommandResponse {
 			}
 		}
 
-	// ── Process control ───────────────────────────────────────────────────
+	// Process control \───────────────────
 
 	case "kill":
 		if len(args) == 0 {
@@ -2657,7 +2668,7 @@ func handleCommand(raw string) CommandResponse {
 			lines = append(lines, line(fmt.Sprintf("%s: %s: no process found", cmd, name), "err"), blank())
 		}
 
-	// ── System info ───────────────────────────────────────────────────────
+	// System info ─
 
 	case "lsblk":
 		lines = append(lines,
