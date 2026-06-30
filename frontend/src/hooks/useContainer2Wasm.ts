@@ -113,20 +113,12 @@ async function loadC2WImage(
 
   return {
     stdin: (data: string) => {
-      // Try ldisc first
+      // Send stdin directly to worker via postMessage
       const encoder = new TextEncoder();
-      const bytes = encoder.encode(data);
-      (slave as any).ldisc.writeFromLower(bytes);
-      (slave as any).ldisc.flushToUpper();
-      // Also push directly to TtyServer's worker buffer as fallback
-      if (ttyServer.toWorkerBuf) {
-        for (var i = 0; i < bytes.length; i++) {
-          ttyServer.toWorkerBuf.push(bytes[i]);
-        }
-        if (ttyServer.state === "input") {
-          ttyServer.feedToWorker(ttyServer.toWorkerBuf.length);
-        }
-      }
+      worker.postMessage({
+        type: "stdin",
+        bytes: Array.from(encoder.encode(data)),
+      });
     },
     destroy: () => {
       worker.terminate();
