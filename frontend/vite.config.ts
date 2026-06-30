@@ -5,6 +5,10 @@ export default defineConfig({
   base: "./",
   plugins: [react()],
   server: {
+    headers: {
+      "Cross-Origin-Opener-Policy": "same-origin",
+      "Cross-Origin-Embedder-Policy": "require-corp",
+    },
     proxy: {
       "/ws": {
         target: "ws://localhost:8080",

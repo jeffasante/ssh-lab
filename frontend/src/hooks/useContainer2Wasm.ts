@@ -1,7 +1,22 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { LabConfig, OS_PRESETS } from "../types";
 import type { OutputLine, NanoFile } from "./useSSH";
-import { WASI, Fd } from "@bjorn3/browser_wasi_shim";
+import {
+  openpty,
+  TtyServer,
+  Termios,
+  ISTRIP,
+  INLCR,
+  IGNCR,
+  ICRNL,
+  IXON,
+  OPOST,
+  ECHO,
+  ECHONL,
+  ICANON,
+  ISIG,
+  IEXTEN,
+} from "xterm-pty";
 
 type UseSSHReturn = {
   lines: OutputLine[];
@@ -13,161 +28,67 @@ type UseSSHReturn = {
   setNanoFile: (file: NanoFile | null) => void;
 };
 
-export const C2W_IMAGES: Record<string, { url: string; label: string }> = {
+const DEMO_ORIGIN = "https://ktock.github.io";
+
+export const C2W_IMAGES: Record<
+  string,
+  { prefix: string; chunks: number; label: string }
+> = {
   debian: {
-    url: "/c2w/debian.wasm",
+    prefix:
+      DEMO_ORIGIN +
+      "/container2wasm-demo/containers/riscv64-debian-wasi-container",
+    chunks: 3,
     label: "Debian (129MB)",
   },
 };
 
 interface C2WInstance {
   stdin: (data: string) => void;
-  resize: (cols: number, rows: number) => void;
   destroy: () => void;
 }
 
-// Custom Fd that captures stdout/stderr to a callback
-class OutputFd extends Fd {
-  private cb: (chunk: string) => void;
-
-  constructor(cb: (chunk: string) => void) {
-    super();
-    this.cb = cb;
-  }
-
-  fdWrite(buf: Uint8Array): number {
-    const decoder = new TextDecoder();
-    this.cb(decoder.decode(buf));
-    return buf.byteLength;
-  }
-}
-
-// Custom Fd for stdin — buffers data written to it
-class InputFd extends Fd {
-  private buf: Uint8Array[] = [];
-  private readers: ((buf: Uint8Array) => void)[] = [];
-
-  write(data: Uint8Array) {
-    if (this.readers.length > 0) {
-      const r = this.readers.shift()!;
-      r(data);
-    } else {
-      this.buf.push(data);
-    }
-  }
-
-  fdRead(size: number): Uint8Array {
-    // Return available data or empty if nothing buffered
-    if (this.buf.length === 0) return new Uint8Array(0);
-    const data = this.buf.shift()!;
-    return data.slice(0, size);
-  }
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes >= 1000000000) return (bytes / 1000000000).toFixed(1) + " GB";
-  if (bytes >= 1000000) return (bytes / 1000000).toFixed(1) + " MB";
-  if (bytes >= 1000) return (bytes / 1000).toFixed(0) + " KB";
-  return bytes + " B";
-}
-
 async function loadC2WImage(
-  url: string,
+  imagePrefix: string,
+  chunkCount: number,
   onOutput: (chunk: string) => void,
 ): Promise<C2WInstance> {
-  // Try fetching with progress tracking
-  const resp = await fetch(url).catch(() => null);
-  if (!resp || !resp.ok) {
-    onOutput(`Failed to fetch ${url}\n`);
-    onOutput(`\nTo build your own images, install c2w:\n`);
-    onOutput(`  https://github.com/container2wasm/container2wasm\n`);
-    onOutput(
-      `\nThen run: c2w debian:latest frontend/public/c2w/debian.wasm\n\n`,
-    );
-    throw new Error("Image not found");
-  }
+  // Create PTY
+  const { master, slave } = openpty();
 
-  const total = parseInt(resp.headers.get("content-length") || "0", 10);
-  const reader = resp.body!.getReader();
-  const chunks: Uint8Array[] = [];
-  let received = 0;
+  // Configure termios like the demo
+  const termios = slave.ioctl("TCGETS");
+  termios.iflag &= ~(ISTRIP | INLCR | IGNCR | ICRNL | IXON);
+  termios.oflag &= ~OPOST;
+  termios.lflag &= ~(ECHO | ECHONL | ICANON | ISIG | IEXTEN);
+  slave.ioctl("TCSETS", termios);
 
-  onOutput(`Loading container image (${formatBytes(total)})...\n`);
-
-  // Read all chunks with progress
-  let dots = 0;
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(value);
-    received += value.length;
-    const pct = total > 0 ? Math.round((received / total) * 100) : 0;
-    dots++;
-    if (dots % 30 === 0 || pct === 100) {
-      const bar =
-        "[" +
-        "#".repeat(Math.floor(pct / 5)) +
-        "-".repeat(20 - Math.floor(pct / 5)) +
-        "]";
-      onOutput(bar + " " + pct + "%  " + formatBytes(received) + "\n");
-    }
-  }
-
-  onOutput("[" + "#".repeat(20) + "] 100% " + formatBytes(total) + "\n");
-
-  onOutput("\nStarting kernel...\n");
-
-  // Concatenate all chunks into one buffer
-  const totalLen = chunks.reduce((a, c) => a + c.length, 0);
-  const buf = new Uint8Array(totalLen);
-  let offset = 0;
-  for (const chunk of chunks) {
-    buf.set(chunk, offset);
-    offset += chunk.length;
-  }
-
-  onOutput("Initializing WASM runtime...\n");
-
-  // Create custom Fds for stdio
-  const inputFd = new InputFd();
-
-  const wasi = new WASI(
-    [], // args
-    [], // env
-    [
-      inputFd, // stdin
-      new OutputFd(onOutput), // stdout
-      new OutputFd(onOutput), // stderr
-    ],
-  );
-
-  // Instantiate from the pre-loaded buffer
-  const wasm = await WebAssembly.instantiate(buf, {
-    wasi_snapshot_preview1: wasi.wasiImport,
+  // Forward PTY master output to our terminal
+  master.onWrite(([data]) => {
+    const decoder = new TextDecoder();
+    onOutput(decoder.decode(data));
   });
 
-  // Signal that the module is ready (I/O connected)
-  onOutput("\n");
+  // Create worker
+  const worker = new Worker("/c2w-src/worker-custom.js");
 
-  // Start the WASM module WITHOUT awaiting — it runs the kernel forever
-  // The _start function boots Linux which never exits, so we fire and forget
-  setTimeout(() => {
-    wasi.start(wasm.instance).catch((err: unknown) => {
-      onOutput("Container exited: " + err + "\n");
-    });
-  }, 0);
+  // Create TtyServer to connect PTY slave to worker
+  const ttyServer = new TtyServer(slave);
+  ttyServer.start(worker);
 
-  // Return handles for external I/O immediately
+  // Send init message with image info
+  worker.postMessage({
+    type: "init",
+    imagename: imagePrefix,
+    chunks: chunkCount,
+  });
+
   return {
     stdin: (data: string) => {
-      const encoder = new TextEncoder();
-      inputFd.write(encoder.encode(data));
-    },
-    resize: (_cols: number, _rows: number) => {
-      // PTY resize not supported with simple Fds
+      master.onData(data);
     },
     destroy: () => {
-      // Nothing to clean up
+      worker.terminate();
     },
   };
 }
@@ -183,16 +104,13 @@ export function useContainer2Wasm(
   const bufRef = useRef("");
 
   const appendLines = useCallback((text: string) => {
-    // Buffer partial lines, flush on newlines
     bufRef.current += text;
     const parts = bufRef.current.split("\n");
     bufRef.current = parts.pop() || "";
-    const newLines: OutputLine[] = parts
-      .map((l, i) => {
-        const isLast = i === parts.length - 1 && bufRef.current === "";
-        return { text: l || (isLast ? "" : " "), class: "" };
-      })
-      .filter((l) => l !== null) as OutputLine[];
+    const newLines: OutputLine[] = parts.map((l) => ({
+      text: l || " ",
+      class: "",
+    }));
     if (newLines.length > 0) {
       setLines((prev) => [...prev, ...newLines]);
     }
@@ -205,16 +123,24 @@ export function useContainer2Wasm(
     initDone.current = true;
 
     const doLoad = async () => {
-      const osInfo = OS_PRESETS[config.os] ?? OS_PRESETS.ubuntu;
+      const image = C2W_IMAGES[imageKey];
+      if (!image) {
+        setLines((prev) => [
+          ...prev,
+          { text: `Unknown image: ${imageKey}`, class: "err" },
+          { text: "", class: "" },
+        ]);
+        return;
+      }
+
       setLines((prev) => [
         ...prev,
-        { text: `${osInfo.pretty} — ${config.hostname}`, class: "head" },
-        { text: `Booting container2wasm...`, class: "muted" },
+        { text: `Booting ${image.label}...`, class: "head" },
         { text: "", class: "" },
       ]);
 
       try {
-        const inst = await loadC2WImage(C2W_IMAGES[imageKey!].url, (chunk) =>
+        const inst = await loadC2WImage(image.prefix, image.chunks, (chunk) =>
           appendLines(chunk),
         );
         instanceRef.current = inst;
@@ -222,31 +148,18 @@ export function useContainer2Wasm(
       } catch (err) {
         setLines((prev) => [
           ...prev,
-          { text: `Failed to load container2wasm image: ${err}`, class: "err" },
-          {
-            text: "Make sure the .wasm files are in frontend/public/c2w/",
-            class: "muted",
-          },
-          {
-            text: "Run: ./container2wasm/download-demo.sh frontend/public/c2w/",
-            class: "muted",
-          },
+          { text: `Failed: ${err}`, class: "err" },
           { text: "", class: "" },
         ]);
       }
     };
 
     doLoad();
-
-    return () => {
-      instanceRef.current?.destroy();
-    };
+    return () => instanceRef.current?.destroy();
   }, [config, imageKey, appendLines]);
 
   const sendCommand = useCallback((cmd: string) => {
-    if (instanceRef.current) {
-      instanceRef.current.stdin(cmd + "\n");
-    }
+    instanceRef.current?.stdin(cmd + "\n");
   }, []);
 
   return {
