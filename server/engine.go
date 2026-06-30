@@ -696,12 +696,30 @@ func lsDir(dir string, long bool) []OutputLine {
 // Real ping support (set by server main.go) \
 var runRealPing func(host string) ([]string, error)
 
+// Real Docker support (set by server main.go) \
+var runRealDocker func(args ...string) ([]string, error)
+var interruptRunning func() error
+
 // Command engine
 
 func handleCommand(raw string) CommandResponse {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return CommandResponse{}
+	}
+
+	// Handle special internal commands
+	if raw == "__SIGINT__" {
+		var lines []OutputLine
+		if interruptRunning != nil {
+			if err := interruptRunning(); err == nil {
+				lines = append(lines, line("^C", "muted"))
+			}
+		} else {
+			lines = append(lines, line("^C", "muted"))
+		}
+		lines = append(lines, blank())
+		return CommandResponse{Lines: lines}
 	}
 
 	if !strings.HasPrefix(raw, "__") {
@@ -713,6 +731,7 @@ func handleCommand(raw string) CommandResponse {
 		state.mu.Unlock()
 	}
 
+	// ── Pipe support
 	// Pipe support
 	if strings.Contains(raw, " | ") {
 		pipeParts := strings.SplitN(raw, " | ", 2)
@@ -1967,6 +1986,19 @@ func handleCommand(raw string) CommandResponse {
 		if len(args) > 0 {
 			sub = args[0]
 		}
+
+		// Try real Docker in server mode
+		if runRealDocker != nil && (sub == "ps" || sub == "images" || sub == "logs" || sub == "stats" || sub == "compose") {
+			out, err := runRealDocker(args...)
+			if err == nil && len(out) > 0 {
+				for _, l := range out {
+					lines = append(lines, line(l, "muted"))
+				}
+				lines = append(lines, blank())
+				break
+			}
+		}
+
 		switch sub {
 		case "ps":
 			showAll := false

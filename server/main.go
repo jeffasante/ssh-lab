@@ -9,6 +9,7 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -19,6 +20,11 @@ import (
 func init() {
 	runRealPing = func(host string) ([]string, error) {
 		cmd := exec.Command("ping", "-c", "3", "-W", "2", host)
+		interruptRunning = func() error {
+			return cmd.Process.Signal(os.Kill)
+		}
+		defer func() { interruptRunning = nil }()
+
 		var out bytes.Buffer
 		cmd.Stdout = &out
 		cmd.Stderr = &out
@@ -28,6 +34,25 @@ func init() {
 		raw := strings.TrimSpace(out.String())
 		if raw == "" {
 			return nil, fmt.Errorf("empty ping output")
+		}
+		return strings.Split(raw, "\n"), nil
+	}
+
+	runRealDocker = func(dockerArgs ...string) ([]string, error) {
+		// Build docker CLI args from our parsed args
+		dockerCmd := []string{"docker"}
+		dockerCmd = append(dockerCmd, dockerArgs...)
+
+		cmd := exec.Command(dockerCmd[0], dockerCmd[1:]...)
+		var out bytes.Buffer
+		cmd.Stdout = &out
+		cmd.Stderr = &out
+		if err := cmd.Run(); err != nil {
+			return nil, err
+		}
+		raw := strings.TrimSpace(out.String())
+		if raw == "" {
+			return nil, fmt.Errorf("empty docker output")
 		}
 		return strings.Split(raw, "\n"), nil
 	}

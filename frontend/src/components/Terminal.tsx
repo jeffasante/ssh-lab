@@ -39,6 +39,9 @@ export default function Terminal({
 }: Props) {
   const outRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const pendingRef = useRef(false);
+  const linesLenRef = useRef(0);
+  const [pending, setPending] = useState(false);
   const [input, setInput] = useState("");
   const [history, setHistory] = useState<string[]>([]);
   const [histIdx, setHistIdx] = useState(-1);
@@ -66,6 +69,12 @@ export default function Terminal({
     if (outRef.current) {
       outRef.current.scrollTop = outRef.current.scrollHeight;
     }
+    // Unblock input when new lines arrive after a submitted command
+    if (pendingRef.current && lines.length > linesLenRef.current) {
+      pendingRef.current = false;
+      setPending(false);
+    }
+    linesLenRef.current = lines.length;
   }, [lines]);
 
   const submit = () => {
@@ -87,9 +96,28 @@ export default function Terminal({
     }
 
     onCommand(cmd);
+
+    // Block input until response arrives
+    if (cmd) {
+      pendingRef.current = true;
+      linesLenRef.current = lines.length;
+      setPending(true);
+    }
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    // Ctrl+C or Cmd+C → interrupt running command
+    if ((e.ctrlKey || e.metaKey) && e.key === "c") {
+      e.preventDefault();
+      if (pendingRef.current) {
+        onCommand("__SIGINT__");
+        pendingRef.current = false;
+        setPending(false);
+      }
+      setInput("");
+      return;
+    }
+
     if (e.key === "Enter") {
       submit();
     } else if (e.key === "ArrowUp") {
@@ -730,7 +758,7 @@ export default function Terminal({
           autoFocus
           autoComplete="off"
           spellCheck={false}
-          disabled={!connected}
+          disabled={!connected || pending}
           style={{
             position: "absolute",
             opacity: 0,
