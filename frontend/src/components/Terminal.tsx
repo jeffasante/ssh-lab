@@ -108,9 +108,13 @@ export default function Terminal({
     setInput("");
     setHistIdx(-1);
 
-    if (cmd) {
-      setHistory((prev) => [cmd, ...prev]);
+    // Don't send empty commands — prevents phantom prompts in container sessions
+    if (!cmd) {
+      setTimeout(() => inputRef.current?.focus(), 0);
+      return;
     }
+
+    setHistory((prev) => [cmd, ...prev]);
 
     if (cmd === "clear" || cmd === "reset") {
       onClear();
