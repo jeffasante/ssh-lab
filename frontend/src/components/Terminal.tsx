@@ -766,20 +766,22 @@ export default function Terminal({
           );
         })}
 
-        {/* Live prompt — hidden for container/PTY sessions that produce their own shell prompt */}
-        {!exited && showPrompt && (
+        {/* Live prompt — promptLabel hidden for container/PTY sessions that produce their own prompt */}
+        {!exited && (
           <div style={{ display: "flex", alignItems: "center", marginTop: 2 }}>
-            <span
-              style={{
-                color: "#e0e0e0",
-                fontFamily: "monospace",
-                fontSize: 12.5,
-                whiteSpace: "nowrap",
-                marginRight: 6,
-              }}
-            >
-              {promptLabel}
-            </span>
+            {showPrompt && (
+              <span
+                style={{
+                  color: "#e0e0e0",
+                  fontFamily: "monospace",
+                  fontSize: 12.5,
+                  whiteSpace: "nowrap",
+                  marginRight: 6,
+                }}
+              >
+                {promptLabel}
+              </span>
+            )}
             <span style={{ color: "#d4d4d4", fontSize: 12.5 }}>{input}</span>
             <span
               style={{
@@ -795,8 +797,8 @@ export default function Terminal({
         )}
       </div>
 
-      {/* Hidden real input — pointerEvents must stay 'none' visually but we programmatic-focus on click */}
-      {!exited && showPrompt && (
+      {/* Hidden real input — always present so container sessions can capture keystrokes */}
+      {!exited && (
         <input
           ref={inputRef}
           value={input}
