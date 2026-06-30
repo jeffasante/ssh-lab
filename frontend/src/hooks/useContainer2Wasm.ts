@@ -110,8 +110,9 @@ async function loadC2WImage(
   ttyServer.start(worker);
 
   // Transfer the WASM buffer to the worker
-  const wasmTransfer = wasmBuf.buffer.slice(0);
-  worker.postMessage({ type: "wasm", buffer: wasmTransfer }, [wasmTransfer]);
+  // Create a new ArrayBuffer that can be transferred (Uint8Array.buffer might be non-transferable)
+  const transferBuf = new Uint8Array(wasmBuf).buffer;
+  worker.postMessage({ type: "wasm", buffer: transferBuf }, [transferBuf]);
 
   return {
     stdin: (data: string) => {
