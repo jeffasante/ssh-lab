@@ -104,7 +104,7 @@ async function loadC2WImage(
   const worker = new Worker("/c2w-src/worker-custom.js?v=" + Date.now());
 
   // Create TtyServer
-  const ttyServer = new TtyServer(slave);
+  const ttyServer: any = new TtyServer(slave);
   ttyServer.start(worker);
 
   // Transfer WASM buffer
@@ -113,11 +113,20 @@ async function loadC2WImage(
 
   return {
     stdin: (data: string) => {
-      // Write user input directly to the PTY's line discipline
+      // Try ldisc first
       const encoder = new TextEncoder();
       const bytes = encoder.encode(data);
       (slave as any).ldisc.writeFromLower(bytes);
       (slave as any).ldisc.flushToUpper();
+      // Also push directly to TtyServer's worker buffer as fallback
+      if (ttyServer.toWorkerBuf) {
+        for (var i = 0; i < bytes.length; i++) {
+          ttyServer.toWorkerBuf.push(bytes[i]);
+        }
+        if (ttyServer.state === "input") {
+          ttyServer.feedToWorker(ttyServer.toWorkerBuf.length);
+        }
+      }
     },
     destroy: () => {
       worker.terminate();
