@@ -408,6 +408,30 @@ export default function Onboarding({
         {mode === "ssh" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div style={labelSx}>connect to real server</div>
+
+            {/* Test server quick-fill */}
+            <div
+              onClick={() => {
+                setSshHost("test.rebex.net");
+                setSshPort("22");
+                setSshUser("demo");
+                setSshPassword("password");
+              }}
+              style={{
+                fontSize: 10,
+                color: "#58a6ff",
+                fontFamily: "'SF Mono','Fira Code',monospace",
+                cursor: "pointer",
+                textDecoration: "underline",
+                textUnderlineOffset: 2,
+                marginBottom: 4,
+                display: "inline-block",
+                width: "fit-content",
+              }}
+            >
+              fill demo server (test.rebex.net)
+            </div>
+
             <div style={{ display: "flex", gap: 8 }}>
               <input
                 value={sshHost}
