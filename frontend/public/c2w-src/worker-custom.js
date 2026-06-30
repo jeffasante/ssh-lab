@@ -1,7 +1,7 @@
 // Custom worker for ssh-lab — adapted from container2wasm demo
 // Uses local paths instead of demo site paths
 
-importScripts("https://cdn.jsdelivr.net/npm/xterm-pty@0.9.4/workerTools.js");
+importScripts("./workerTools.js");
 importScripts("./wasi/index.js");
 importScripts("./wasi/wasi_defs.js");
 importScripts("./wasi/worker-util.js");
