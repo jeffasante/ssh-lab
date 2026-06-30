@@ -115,7 +115,9 @@ async function loadC2WImage(
 
   return {
     stdin: (data: string) => {
-      master.onData(data);
+      // Send user input through the PTY line discipline (lower/terminal side)
+      const encoder = new TextEncoder();
+      (slave as any).ldisc.writeFromLower(encoder.encode(data));
     },
     destroy: () => {
       worker.terminate();

@@ -111,6 +111,12 @@ function wasiHack(wasi, ttyClient, connfd) {
   };
 }
 
+function genmac() {
+  return "02:XX:XX:XX:XX:XX".replace(/X/g, function () {
+    return "0123456789ABCDEF".charAt(Math.floor(Math.random() * 16));
+  });
+}
+
 // wasiHackSocket — stubs socket operations (real networking needs the full stack)
 function wasiHackSocket(wasi, listenfd, connfd) {
   var _fd_close = wasi.wasiImport.fd_close;
