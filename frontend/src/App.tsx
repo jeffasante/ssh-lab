@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useSSH } from "./hooks/useSSH";
 import { useWasmSSH } from "./hooks/useWasmSSH";
-import { useContainer2Wasm, C2W_IMAGES } from "./hooks/useContainer2Wasm";
 import Terminal from "./components/Terminal";
 import Sidebar from "./components/Sidebar";
 import Onboarding from "./components/Onboarding";
@@ -88,27 +87,29 @@ export default function App() {
   const isC2W = appMode === "c2w";
   const isSSH = appMode === "ssh";
   const useWasm = mode === "wasm" && !isC2W;
-  const labConfig = isLab || isC2W ? (config as LabConfig) : null;
-  const c2wKey = Object.keys(C2W_IMAGES)[0];
+  const labConfig = isLab ? (config as LabConfig) : null;
 
-  // Call ALL hooks unconditionally with null-safe params
+  // If Debian mode, open the working demo page and go back to lab
+  useEffect(() => {
+    if (isC2W) {
+      window.open(
+        "https://ktock.github.io/container2wasm-demo/riscv64-debian.html",
+        "_blank",
+      );
+      setAppMode("lab");
+      setConfig(null);
+      localStorage.removeItem("ssh-lab-config");
+      localStorage.removeItem("ssh-lab-app-mode");
+    }
+  }, [isC2W]);
+
   const labResult = useSSH(
     isSSH ? null : isLab ? labConfig : null,
     isSSH ? (config as SSHConfig) : undefined,
   );
   const wasmResult = useWasmSSH(isC2W || isSSH ? null : labConfig);
-  const c2wResult = useContainer2Wasm(
-    isC2W ? labConfig : null,
-    isC2W ? c2wKey : undefined,
-  );
 
-  const hookResult = isC2W
-    ? c2wResult
-    : isSSH
-      ? labResult
-      : useWasm
-        ? wasmResult
-        : labResult;
+  const hookResult = isSSH ? labResult : useWasm ? wasmResult : labResult;
   const {
     lines,
     services,
@@ -297,23 +298,30 @@ export default function App() {
           position: "relative",
         }}
       >
-        <Terminal
-          lines={lines}
-          onCommand={handleCommand}
-          onClear={clearLines}
-          connected={connected}
-          username={
-            isLab
-              ? (config as LabConfig).username
-              : appMode === "c2w"
-                ? (config as LabConfig).username
-                : ""
-          }
-          hostname={hostname}
-          nanoFile={nanoFile}
-          setNanoFile={setNanoFile}
-          theme={theme}
-        />
+        {appMode === "c2w" ? (
+          <iframe
+            src="https://ktock.github.io/container2wasm-demo/riscv64-debian.html"
+            style={{
+              width: "100%",
+              height: "100%",
+              border: "none",
+              background: "#000",
+            }}
+            title="Debian"
+          />
+        ) : (
+          <Terminal
+            lines={lines}
+            onCommand={handleCommand}
+            onClear={clearLines}
+            connected={connected}
+            username={isLab ? (config as LabConfig).username : ""}
+            hostname={hostname}
+            nanoFile={nanoFile}
+            setNanoFile={setNanoFile}
+            theme={theme}
+          />
+        )}
         {appMode === "lab" && (
           <Sidebar
             services={services}
