@@ -146,10 +146,18 @@ async function loadC2WImage(
     wasi_snapshot_preview1: wasi.wasiImport,
   });
 
-  // Start the WASM module (boots the container)
-  wasi.start(wasm.instance);
+  // Signal that the module is ready (I/O connected)
+  onOutput("\n");
 
-  // Return handles for external I/O
+  // Start the WASM module WITHOUT awaiting — it runs the kernel forever
+  // The _start function boots Linux which never exits, so we fire and forget
+  setTimeout(() => {
+    wasi.start(wasm.instance).catch((err: unknown) => {
+      onOutput("Container exited: " + err + "\n");
+    });
+  }, 0);
+
+  // Return handles for external I/O immediately
   return {
     stdin: (data: string) => {
       const encoder = new TextEncoder();
