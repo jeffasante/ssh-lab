@@ -32,6 +32,7 @@ onmessage = (msg) => {
         ];
         args = ["arg0", "--net=socket=listenfd=4", "--mac", genmac()];
         env = [
+          "TERM=xterm-256color",
           "SSL_CERT_FILE=/.wasmenv/proxy.crt",
           "https_proxy=http://192.168.127.253:80",
           "http_proxy=http://192.168.127.253:80",
@@ -44,6 +45,7 @@ onmessage = (msg) => {
       return;
     }
     postMessage({ type: "status", message: "start wasi" });
+    env = ["TERM=xterm-256color"];
     startWasi(wasm, ttyClient, args, env, fds, listenfd, 5);
   });
 };
@@ -134,15 +136,6 @@ function wasiHack(wasi, ttyClient, connfd) {
         if (buf.length == 0) {
           continue;
         }
-        var text = new TextDecoder().decode(buf);
-        console.log(
-          "[WORKER fd_write] fd=" +
-            fd +
-            " len=" +
-            buf.length +
-            " text=" +
-            JSON.stringify(text.slice(0, 80)),
-        );
         ttyClient.onWrite(Array.from(buf));
         wtotal += buf.length;
       }

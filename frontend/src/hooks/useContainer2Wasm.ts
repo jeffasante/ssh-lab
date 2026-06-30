@@ -1,22 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { LabConfig, OS_PRESETS } from "../types";
+import { LabConfig } from "../types";
 import type { OutputLine, NanoFile } from "./useSSH";
-import {
-  openpty,
-  TtyServer,
-  Termios,
-  ISTRIP,
-  INLCR,
-  IGNCR,
-  ICRNL,
-  IXON,
-  OPOST,
-  ECHO,
-  ECHONL,
-  ICANON,
-  ISIG,
-  IEXTEN,
-} from "xterm-pty";
+import { openpty, TtyServer } from "xterm-pty";
 
 type UseSSHReturn = {
   lines: OutputLine[];
@@ -29,23 +14,24 @@ type UseSSHReturn = {
 };
 
 function makeTerminalBridge(onOutput: (text: string) => void) {
-  const listeners: Array<(data: string) => void> = [];
+  const dataListeners: Array<(data: string) => void> = [];
+  const binaryListeners: Array<(data: string) => void> = [];
   return {
     onData: (cb: (data: string) => void) => {
-      listeners.push(cb);
+      dataListeners.push(cb);
       return {
         dispose: () => {
-          const i = listeners.indexOf(cb);
-          if (i >= 0) listeners.splice(i, 1);
+          const i = dataListeners.indexOf(cb);
+          if (i >= 0) dataListeners.splice(i, 1);
         },
       };
     },
     onBinary: (cb: (data: string) => void) => {
-      listeners.push(cb);
+      binaryListeners.push(cb);
       return {
         dispose: () => {
-          const i = listeners.indexOf(cb);
-          if (i >= 0) listeners.splice(i, 1);
+          const i = binaryListeners.indexOf(cb);
+          if (i >= 0) binaryListeners.splice(i, 1);
         },
       };
     },
@@ -60,51 +46,95 @@ function makeTerminalBridge(onOutput: (text: string) => void) {
       cb?.();
     },
     send: (text: string) => {
-      for (const cb of listeners) cb(text);
+      for (const cb of dataListeners) cb(text);
     },
   };
 }
-
-let _c2wCounter = 0;
 
 export function useContainer2Wasm(
   config: LabConfig | null,
   imageUrl?: string,
 ): UseSSHReturn {
-  const instanceId = useRef(`c2w-${++_c2wCounter}`);
-  console.log(
-    `[DEBUG ${instanceId.current}] RENDER config=${JSON.stringify(config?.hostname ?? null)} imageUrl=${imageUrl}`,
-  );
   const [connected, setConnected] = useState(false);
   const [lines, setLines] = useState<OutputLine[]>([]);
   const masterRef = useRef<any>(null);
   const bridgeRef = useRef<ReturnType<typeof makeTerminalBridge> | null>(null);
   const workerRef = useRef<Worker | null>(null);
   const initDone = useRef(false);
-  const bufRef = useRef("");
+  const currentLineRef = useRef("");
+  const committedLinesRef = useRef<OutputLine[]>([]);
 
   const appendLine = useCallback((text: string) => {
-    if (text.length > 0) {
-      console.log(
-        `[DEBUG ${instanceId.current}] appendLine(${JSON.stringify(text.slice(0, 60))})`,
-      );
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      const next = text[i + 1];
+      const afterNext = text[i + 2];
+
+      if (ch === "\x1b") {
+        const ansiMatch = text.slice(i).match(/^\x1b\[[0-?]*[ -/]*[@-~]/);
+        if (ansiMatch) {
+          if (ansiMatch[0].endsWith("K")) currentLineRef.current = "";
+          if (ansiMatch[0].endsWith("J")) {
+            committedLinesRef.current = [];
+            currentLineRef.current = "";
+          }
+          i += ansiMatch[0].length - 1;
+        }
+        continue;
+      }
+
+      if (ch === "\r") {
+        if (next === "\r" && afterNext === "\n") continue;
+        if (next !== "\n") currentLineRef.current = "";
+        continue;
+      }
+
+      if (ch === "\n") {
+        const line = currentLineRef.current || " ";
+        const previous = committedLinesRef.current.at(-1)?.text ?? "";
+        const isDuplicateEcho =
+          line !== " " &&
+          (previous.endsWith(`# ${line}`) || previous.endsWith(`$ ${line}`));
+        if (!isDuplicateEcho) {
+          committedLinesRef.current = [
+            ...committedLinesRef.current,
+            { text: line, class: "" },
+          ];
+        }
+        currentLineRef.current = "";
+        continue;
+      }
+
+      if (ch === "\b" || ch === "\x7f") {
+        currentLineRef.current = currentLineRef.current.slice(0, -1);
+        continue;
+      }
+
+      if (ch >= " ") {
+        currentLineRef.current += ch;
+      }
     }
-    bufRef.current += text;
-    const parts = bufRef.current.split("\n");
-    bufRef.current = parts.pop() || "";
-    const newLines = parts.map((l) => ({ text: l || " ", class: "" }));
-    if (newLines.length > 0) setLines((prev) => [...prev, ...newLines]);
+
+    const partial = currentLineRef.current;
+    setLines(
+      partial
+        ? [...committedLinesRef.current, { text: partial, class: "" }]
+        : committedLinesRef.current,
+    );
   }, []);
 
-  const clearLines = useCallback(() => setLines([]), []);
+  const clearLines = useCallback(() => {
+    currentLineRef.current = "";
+    committedLinesRef.current = [];
+    setLines([]);
+  }, []);
 
   useEffect(() => {
-    console.log(
-      `[DEBUG ${instanceId.current}] EFFECT RUN config=${!!config} imageUrl=${imageUrl} initDone=${initDone.current}`,
-    );
     if (!config || !imageUrl || initDone.current) return;
     initDone.current = true;
-    console.log(`[DEBUG ${instanceId.current}] EFFECT PROCEEDING`);
+    currentLineRef.current = "";
+    committedLinesRef.current = [];
+    setLines([]);
     let cancelled = false;
 
     const doInit = async () => {
@@ -124,16 +154,6 @@ export function useContainer2Wasm(
 
       const { master, slave } = openpty();
       masterRef.current = master;
-
-      // Configure termios like the example
-      const t = slave.ioctl("TCGETS");
-      t.iflag &= ~(ISTRIP | INLCR | IGNCR | ICRNL | IXON);
-      t.oflag &= ~OPOST;
-      t.lflag &= ~(ECHO | ECHONL | ICANON | ISIG | IEXTEN);
-      slave.ioctl(
-        "TCSETS",
-        new Termios(t.iflag, t.oflag, t.cflag, t.lflag, t.cc),
-      );
 
       // Create terminal bridge and activate the master addon.
       // activate() already wires up bidirectional I/O:
@@ -213,11 +233,43 @@ export function useContainer2Wasm(
   }, [config, imageUrl, appendLine]);
 
   const sendCommand = useCallback((cmd: string) => {
-    console.log(
-      `[DEBUG ${instanceId.current}] sendCommand(${JSON.stringify(cmd)})`,
-    );
-    bridgeRef.current?.send(cmd + "\n");
-  }, []);
+    if (cmd === "__CLEAR__") {
+      clearLines();
+      appendLine("root@localhost:/# ");
+      return;
+    }
+
+    if (cmd.startsWith("__HOST_CURL__")) {
+      const rawCommand = cmd.slice("__HOST_CURL__".length).trim();
+      const url = rawCommand
+        .split(/\s+/)
+        .find((part) => /^https?:\/\//.test(part));
+      appendLine("\r\n");
+      if (!url) {
+        appendLine("curl: no URL specified\nroot@localhost:/# ");
+        return;
+      }
+
+      fetch(`/api/internet?url=${encodeURIComponent(url)}`)
+        .then(async (response) => {
+          const payload = await response.json();
+          if (!response.ok || !payload.ok) {
+            throw new Error(payload.error || response.statusText);
+          }
+          appendLine(
+            `${payload.body.replace(/\r?\n?$/, "")}\nroot@localhost:/# `,
+          );
+        })
+        .catch((error) => {
+          appendLine(
+            `curl: (7) ${error instanceof Error ? error.message : String(error)}\nroot@localhost:/# `,
+          );
+        });
+      return;
+    }
+
+    bridgeRef.current?.send(cmd);
+  }, [appendLine, clearLines]);
 
   return {
     lines,

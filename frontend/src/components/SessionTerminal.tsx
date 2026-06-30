@@ -40,10 +40,6 @@ export default function SessionTerminal({
   const isLabInBrowserWasm = mode === "lab" && runMode === "wasm";
   const isLabServerBackend = mode === "lab" && runMode === "server";
 
-  console.log(
-    `[SessionTerminal] mode=${mode} runMode=${runMode} isLabServer=${isLabServerBackend} isLabWasm=${isLabInBrowserWasm} isSSH=${isSSH} isC2W=${isC2W} config=${JSON.stringify((config as any)?.hostname ?? (config as any)?.host ?? null)}`,
-  );
-
   // All three hooks called unconditionally (React rules), but only one
   // receives a real config. The others get null and stay completely inert
   // (no WebSocket, no WASM init, no PTY).

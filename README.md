@@ -4,6 +4,8 @@ A fake SSH server for practicing Linux commands, monitoring workflows, and AI-ag
 
 **Try it now:** [jeffasante.github.io/ssh-lab/?mode=wasm](https://jeffasante.github.io/ssh-lab/?mode=wasm) — runs entirely in your browser via WebAssembly.
 
+![Debian container2wasm terminal running curl](docs/ssh-lab-c2w-terminal.png)
+
 ## Stack
 
 - **Backend**: Go + gorilla/websocket — simulates a full Linux server state in memory
@@ -17,6 +19,7 @@ A fake SSH server for practicing Linux commands, monitoring workflows, and AI-ag
 | **Server** (Docker) | `http://localhost:3002` | Go server via WebSocket |
 | **WASM** (browser) | `https://jeffasante.github.io/ssh-lab/?mode=wasm` | None — runs client-side |
 | **WASM** (local dev) | `http://localhost:5173?mode=wasm` | None — Vite dev server only |
+| **Debian c2w terminal** | `http://localhost:5173?mode=wasm&c2w=1` | Vite dev server with COOP/COEP headers |
 
 ## Features
 
@@ -60,7 +63,33 @@ cd frontend && npm install && npm run dev
 
 # For WASM mode instead:
 # Open http://localhost:5173?mode=wasm
+
+# For the real Debian container2wasm terminal:
+# Open http://localhost:5173?mode=wasm&c2w=1
 ```
+
+### Debian container2wasm terminal
+
+The Debian mode runs a container2wasm image directly in the browser and exposes it through the app's terminal UI. Use it when users need a real Linux shell for quick command testing instead of the simulated lab engine.
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Then open `http://localhost:5173?mode=wasm&c2w=1` and choose **Debian**. This mode requires `SharedArrayBuffer`, so the page must be served with cross-origin isolation headers (`COOP: same-origin` and `COEP: require-corp`). The Vite config provides those headers for local dev; static hosts need equivalent header configuration.
+
+For a one-command terminal launcher:
+
+```bash
+cd frontend
+npm run debian
+```
+
+`curl http://...` and `curl https://...` inside the Debian terminal are routed through the app's `/api/internet` endpoint, so commands such as `curl https://www.digitalocean.com/robots.txt` can reach the public internet even though the browser-hosted WASM VM itself cannot open arbitrary native sockets.
+
+Running Wasm from a native terminal with tools like `wasmtime` works well for ordinary WASI programs, but the Debian c2w image is different: it expects the browser worker, `browser_wasi_shim`, and `xterm-pty` bridge. So `wasmtime frontend/public/c2w/debian.wasm` is not the supported terminal path for this image.
 
 ## Commands reference
 

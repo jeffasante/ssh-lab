@@ -6,9 +6,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"math/rand"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"strings"
@@ -61,6 +63,69 @@ func init() {
 type WSMessage struct {
 	Type    string      `json:"type"`
 	Payload interface{} `json:"payload"`
+}
+
+func internetProxyHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	target := r.URL.Query().Get("url")
+	parsedTarget, err := url.Parse(target)
+	if err != nil || parsedTarget == nil || parsedTarget.Host == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"ok":    false,
+			"error": "bad url",
+		})
+		return
+	}
+	if parsedTarget.Scheme != "http" && parsedTarget.Scheme != "https" {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"ok":    false,
+			"error": "only http and https URLs are supported",
+		})
+		return
+	}
+
+	client := http.Client{Timeout: 15 * time.Second}
+	req, err := http.NewRequest(http.MethodGet, parsedTarget.String(), nil)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"ok":    false,
+			"error": err.Error(),
+		})
+		return
+	}
+	req.Header.Set("User-Agent", "ssh-lab-curl/1.0")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		w.WriteHeader(http.StatusBadGateway)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"ok":    false,
+			"error": err.Error(),
+		})
+		return
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
+	if err != nil {
+		w.WriteHeader(http.StatusBadGateway)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"ok":    false,
+			"error": err.Error(),
+		})
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"ok":         resp.StatusCode >= 200 && resp.StatusCode < 400,
+		"status":     resp.StatusCode,
+		"statusText": resp.Status,
+		"body":       string(body),
+	})
 }
 
 var upgrader = websocket.Upgrader{
@@ -169,6 +234,7 @@ func main() {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"status":"ok"}`))
 	})
+	mux.HandleFunc("/api/internet", internetProxyHandler)
 
 	mux.HandleFunc("/api/init", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

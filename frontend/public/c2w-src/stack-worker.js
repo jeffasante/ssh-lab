@@ -1,7 +1,7 @@
-importScripts(location.origin + "/container2wasm-demo" + "/src/browser_wasi_shim/index.js");
-importScripts(location.origin + "/container2wasm-demo" + "/src/browser_wasi_shim/wasi_defs.js");
-importScripts(location.origin + "/container2wasm-demo" + "/src/worker-util.js");
-importScripts(location.origin + "/container2wasm-demo" + "/src/wasi-util.js");
+importScripts("./wasi/index.js");
+importScripts("./wasi/wasi_defs.js");
+importScripts("./wasi/worker-util.js");
+importScripts("./wasi/wasi-util.js");
 
 onmessage = (msg) => {
     serveIfInitMsg(msg);

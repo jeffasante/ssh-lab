@@ -29,6 +29,47 @@ function classColors(theme: Theme): Record<string, string> {
   };
 }
 
+const PTY_COMMAND_COMPLETIONS = [
+  "apt",
+  "cat",
+  "cd",
+  "chmod",
+  "chown",
+  "clear",
+  "cp",
+  "date",
+  "df",
+  "dpkg",
+  "du",
+  "echo",
+  "env",
+  "exit",
+  "export",
+  "find",
+  "free",
+  "grep",
+  "head",
+  "hostname",
+  "id",
+  "ip",
+  "kill",
+  "ln",
+  "ls",
+  "mkdir",
+  "mount",
+  "mv",
+  "pwd",
+  "rm",
+  "rmdir",
+  "sh",
+  "sleep",
+  "tail",
+  "tar",
+  "touch",
+  "uname",
+  "whoami",
+];
+
 export default function Terminal({
   lines,
   onCommand,
@@ -41,6 +82,7 @@ export default function Terminal({
   theme,
   showPrompt = true,
 }: Props) {
+  const isPtySession = !showPrompt;
   const outRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const pendingRef = useRef(false);
@@ -140,6 +182,57 @@ export default function Terminal({
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (isPtySession) {
+      e.preventDefault();
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c") {
+        onCommand("\x03");
+        setInput("");
+        return;
+      }
+
+      if (e.key === "Enter") {
+        const cmd = input.trim();
+        if (cmd === "clear" || cmd === "reset") {
+          onCommand("__CLEAR__");
+        } else if (/^curl\s+/.test(cmd) && /https?:\/\//.test(cmd)) {
+          onCommand(`__HOST_CURL__${cmd}`);
+        } else {
+          onCommand("\r");
+        }
+        setInput("");
+      } else if (e.key === "Tab") {
+        const parts = input.split(/\s+/);
+        const current = parts[parts.length - 1] ?? "";
+        const isCommandPosition = parts.length === 1;
+        const match = isCommandPosition
+          ? PTY_COMMAND_COMPLETIONS.find((cmd) => cmd.startsWith(current))
+          : undefined;
+
+        if (match && match !== current) {
+          const suffix = match.slice(current.length);
+          onCommand(suffix);
+          setInput(match);
+        } else {
+          onCommand("\t");
+        }
+      } else if (e.key === "Backspace") {
+        onCommand("\x7f");
+        setInput((prev) => prev.slice(0, -1));
+      } else if (e.key === "Delete") onCommand("\x1b[3~");
+      else if (e.key === "ArrowUp") onCommand("\x1b[A");
+      else if (e.key === "ArrowDown") onCommand("\x1b[B");
+      else if (e.key === "ArrowRight") onCommand("\x1b[C");
+      else if (e.key === "ArrowLeft") onCommand("\x1b[D");
+      else if (e.key === "Home") onCommand("\x1b[H");
+      else if (e.key === "End") onCommand("\x1b[F");
+      else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
+        onCommand(e.key);
+        setInput((prev) => prev + e.key);
+      }
+      return;
+    }
+
     // Ctrl+C or Cmd+C → interrupt running command
     if ((e.ctrlKey || e.metaKey) && e.key === "c") {
       e.preventDefault();
@@ -819,15 +912,25 @@ export default function Terminal({
       {!exited && (
         <input
           ref={inputRef}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
+          value={isPtySession ? "" : input}
+          onChange={(e) => {
+            if (!isPtySession) setInput(e.target.value);
+          }}
           onKeyDown={onKeyDown}
+          onPaste={(e) => {
+            if (!isPtySession) return;
+            e.preventDefault();
+            const pastedText = e.clipboardData.getData("text");
+            onCommand(pastedText);
+            const lastLine = pastedText.split(/\r?\n/).pop() ?? "";
+            setInput((prev) => prev + lastLine);
+          }}
           autoFocus
           autoComplete="off"
           autoCorrect="off"
           autoCapitalize="none"
           spellCheck={false}
-          disabled={pending && connected}
+          disabled={!isPtySession && pending && connected}
           style={{
             position: "absolute",
             opacity: 0,
