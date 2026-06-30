@@ -123,7 +123,6 @@ export default function Terminal({
     }
   };
 
-
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     // Ctrl+C or Cmd+C → interrupt running command
     if ((e.ctrlKey || e.metaKey) && e.key === "c") {
@@ -490,12 +489,18 @@ export default function Terminal({
               if (nanoPrompt === "exit-confirm") {
                 if (e.key.toLowerCase() === "y") handlePromptResponse("y");
                 else if (e.key.toLowerCase() === "n") handlePromptResponse("n");
-                else if (e.key === "Escape" || (e.ctrlKey && e.key === "c")) handlePromptResponse("cancel");
+                else if (e.key === "Escape" || (e.ctrlKey && e.key === "c"))
+                  handlePromptResponse("cancel");
               }
               return;
             }
-            if (e.ctrlKey && e.key === "x") { e.preventDefault(); handleNanoExit(); }
-            else if (e.ctrlKey && e.key === "o") { e.preventDefault(); setNanoPrompt("save-name"); }
+            if (e.ctrlKey && e.key === "x") {
+              e.preventDefault();
+              handleNanoExit();
+            } else if (e.ctrlKey && e.key === "o") {
+              e.preventDefault();
+              setNanoPrompt("save-name");
+            }
           }}
         />
 
@@ -522,10 +527,26 @@ export default function Terminal({
             <span>
               {nanoPrompt === "exit-confirm" && (
                 <>
-                  Save modified buffer? (Answering "No" will DISCARD changes) [Y/N] :{" "}
-                  <button onClick={() => handlePromptResponse("y")} style={nanoBtn}>Y</button>
-                  <button onClick={() => handlePromptResponse("n")} style={nanoBtn}>N</button>
-                  <button onClick={() => handlePromptResponse("cancel")} style={{ ...nanoBtn, marginLeft: 8 }}>Cancel</button>
+                  Save modified buffer? (Answering "No" will DISCARD changes)
+                  [Y/N] :{" "}
+                  <button
+                    onClick={() => handlePromptResponse("y")}
+                    style={nanoBtn}
+                  >
+                    Y
+                  </button>
+                  <button
+                    onClick={() => handlePromptResponse("n")}
+                    style={nanoBtn}
+                  >
+                    N
+                  </button>
+                  <button
+                    onClick={() => handlePromptResponse("cancel")}
+                    style={{ ...nanoBtn, marginLeft: 8 }}
+                  >
+                    Cancel
+                  </button>
                 </>
               )}
               {nanoPrompt === "save-name" && (
@@ -536,15 +557,26 @@ export default function Terminal({
                     onChange={(e) => setNanoTempFilename(e.target.value)}
                     autoFocus
                     style={{
-                      background: "#ccc", color: "#000", border: "none",
-                      fontFamily: "inherit", fontSize: 13, padding: "0 4px", width: 200,
+                      background: "#ccc",
+                      color: "#000",
+                      border: "none",
+                      fontFamily: "inherit",
+                      fontSize: 13,
+                      padding: "0 4px",
+                      width: 200,
                     }}
                     onKeyDown={(e) => {
                       if (e.key === "Enter") handlePromptResponse("confirm");
-                      else if (e.key === "Escape") handlePromptResponse("cancel");
+                      else if (e.key === "Escape")
+                        handlePromptResponse("cancel");
                     }}
                   />
-                  <button onClick={() => handlePromptResponse("confirm")} style={nanoBtn}>Write</button>
+                  <button
+                    onClick={() => handlePromptResponse("confirm")}
+                    style={nanoBtn}
+                  >
+                    Write
+                  </button>
                 </>
               )}
               {nanoPrompt === "none" && (nanoStatus || "")}
@@ -573,7 +605,11 @@ export default function Terminal({
             {[
               { key: "^G", label: "Get Help", onClick: undefined },
               { key: "^X", label: "Exit", onClick: handleNanoExit },
-              { key: "^O", label: "WriteOut", onClick: () => setNanoPrompt("save-name") },
+              {
+                key: "^O",
+                label: "WriteOut",
+                onClick: () => setNanoPrompt("save-name"),
+              },
               { key: "^J", label: "Justify", onClick: undefined },
               { key: "^R", label: "Read File", onClick: undefined },
               { key: "^W", label: "Where is", onClick: undefined },
@@ -609,7 +645,9 @@ export default function Terminal({
                 >
                   {key}
                 </span>
-                <span style={{ color: "#d4d4d4", whiteSpace: "nowrap" }}>{label}</span>
+                <span style={{ color: "#d4d4d4", whiteSpace: "nowrap" }}>
+                  {label}
+                </span>
               </div>
             ))}
           </div>
@@ -617,7 +655,6 @@ export default function Terminal({
       </div>
     );
   }
-
 
   const promptLabel = `${username}@${hostname}:~$`;
 
@@ -758,14 +795,14 @@ export default function Terminal({
           autoCorrect="off"
           autoCapitalize="none"
           spellCheck={false}
-          disabled={!connected || pending}
+          disabled={pending}
           style={{
             position: "absolute",
             opacity: 0,
             pointerEvents: "none",
             width: 1,
             height: 1,
-            fontSize: 16, /* prevent iOS zoom on focus */
+            fontSize: 16 /* prevent iOS zoom on focus */,
           }}
         />
       )}
