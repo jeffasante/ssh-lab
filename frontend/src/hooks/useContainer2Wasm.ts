@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { LabConfig, OS_PRESETS } from "../types";
 import type { OutputLine, NanoFile } from "./useSSH";
-import { WASI } from "@bjorn3/browser_wasi_shim";
-import { openpty } from "xterm-pty";
+import { WASI, Fd } from "@bjorn3/browser_wasi_shim";
 
 type UseSSHReturn = {
   lines: OutputLine[];
@@ -27,6 +26,44 @@ interface C2WInstance {
   destroy: () => void;
 }
 
+// Custom Fd that captures stdout/stderr to a callback
+class OutputFd extends Fd {
+  private cb: (chunk: string) => void;
+
+  constructor(cb: (chunk: string) => void) {
+    super();
+    this.cb = cb;
+  }
+
+  fdWrite(buf: Uint8Array): number {
+    const decoder = new TextDecoder();
+    this.cb(decoder.decode(buf));
+    return buf.byteLength;
+  }
+}
+
+// Custom Fd for stdin — buffers data written to it
+class InputFd extends Fd {
+  private buf: Uint8Array[] = [];
+  private readers: ((buf: Uint8Array) => void)[] = [];
+
+  write(data: Uint8Array) {
+    if (this.readers.length > 0) {
+      const r = this.readers.shift()!;
+      r(data);
+    } else {
+      this.buf.push(data);
+    }
+  }
+
+  fdRead(size: number): Uint8Array {
+    // Return available data or empty if nothing buffered
+    if (this.buf.length === 0) return new Uint8Array(0);
+    const data = this.buf.shift()!;
+    return data.slice(0, size);
+  }
+}
+
 async function loadC2WImage(
   url: string,
   onOutput: (chunk: string) => void,
@@ -43,24 +80,16 @@ async function loadC2WImage(
     throw new Error("Image not found");
   }
 
-  // Set up xterm-pty (master/slave pair)
-  const { master, slave } = openpty();
+  // Create custom Fds for stdio
+  const inputFd = new InputFd();
 
-  // Forward PTY master output to our terminal
-  master.onWrite(([data]) => {
-    const decoder = new TextDecoder();
-    onOutput(decoder.decode(data));
-  });
-
-  // Set up WASI with the PTY slave as stdio
   const wasi = new WASI(
     [], // args
     [], // env
     [
-      // fds: map WASI stdio to PTY slave
-      slave.open(),
-      slave.open(),
-      slave.open(),
+      inputFd, // stdin
+      new OutputFd(onOutput), // stdout
+      new OutputFd(onOutput), // stderr
     ],
   );
 
@@ -77,13 +106,13 @@ async function loadC2WImage(
   return {
     stdin: (data: string) => {
       const encoder = new TextEncoder();
-      slave.write(encoder.encode(data));
+      inputFd.write(encoder.encode(data));
     },
-    resize: (cols: number, rows: number) => {
-      slave.ioctl("TIOCSWINSZ", [rows, cols]);
+    resize: (_cols: number, _rows: number) => {
+      // PTY resize not supported with simple Fds
     },
     destroy: () => {
-      master.dispose();
+      // Nothing to clean up
     },
   };
 }
