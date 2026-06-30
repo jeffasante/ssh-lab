@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { LabConfig, SSHConfig, AppMode, OS_PRESETS, SCENARIOS } from "../types";
 
 function randomHostname(): string {
@@ -6,8 +6,35 @@ function randomHostname(): string {
   return "server-" + suffix;
 }
 
+type StoredProfile = {
+  name: string;
+  mode: AppMode;
+  config: LabConfig | SSHConfig;
+};
+
+function loadProfiles(): StoredProfile[] {
+  try {
+    return JSON.parse(localStorage.getItem("ssh-lab-profiles") || "[]");
+  } catch {
+    return [];
+  }
+}
+
+function saveProfile(
+  name: string,
+  mode: AppMode,
+  config: LabConfig | SSHConfig,
+) {
+  const profiles = loadProfiles().filter((p) => p.name !== name);
+  profiles.unshift({ name, mode, config });
+  if (profiles.length > 10) profiles.length = 10;
+  localStorage.setItem("ssh-lab-profiles", JSON.stringify(profiles));
+}
+
 type Props = {
   onComplete: (config: LabConfig | SSHConfig, mode: AppMode) => void;
+  savedProfile?: StoredProfile | null;
+  onClearProfile?: () => void;
 };
 
 const roles = [
@@ -22,14 +49,46 @@ const roles = [
 
 const oses = Object.values(OS_PRESETS);
 
-export default function Onboarding({ onComplete }: Props) {
+export default function Onboarding({
+  onComplete,
+  savedProfile,
+  onClearProfile,
+}: Props) {
+  const [profiles, setProfiles] = useState<StoredProfile[]>([]);
+  const [showProfiles, setShowProfiles] = useState(false);
   const [mode, setMode] = useState<AppMode>("lab");
   const [step, setStep] = useState(1);
-  const [username, setUsername] = useState("");
-  const [role, setRole] = useState("sre");
-  const [hostname, setHostname] = useState(randomHostname());
-  const [os, setOs] = useState("ubuntu");
-  const [scenario, setScenario] = useState("healthy");
+  const [username, setUsername] = useState(
+    savedProfile && savedProfile.mode === "lab"
+      ? (savedProfile.config as LabConfig).username
+      : "",
+  );
+  const [role, setRole] = useState(
+    savedProfile && savedProfile.mode === "lab"
+      ? (savedProfile.config as LabConfig).role || "sre"
+      : "sre",
+  );
+  const [hostname, setHostname] = useState(
+    savedProfile && savedProfile.mode === "lab"
+      ? (savedProfile.config as LabConfig).hostname
+      : randomHostname(),
+  );
+  const [os, setOs] = useState(
+    savedProfile && savedProfile.mode === "lab"
+      ? (savedProfile.config as LabConfig).os || "ubuntu"
+      : "ubuntu",
+  );
+  const [scenario, setScenario] = useState(
+    savedProfile && savedProfile.mode === "lab"
+      ? (savedProfile.config as LabConfig).scenario || "healthy"
+      : "healthy",
+  );
+
+  useEffect(() => {
+    setProfiles(loadProfiles());
+    // If there's a saved profile, pre-select its mode
+    if (savedProfile) setMode(savedProfile.mode);
+  }, [savedProfile]);
 
   const canNext = (): boolean => {
     if (step === 1 && username.trim() === "") return false;
@@ -49,6 +108,24 @@ export default function Onboarding({ onComplete }: Props) {
   const [sshPort, setSshPort] = useState("22");
   const [sshUser, setSshUser] = useState("");
   const [sshPassword, setSshPassword] = useState("");
+
+  const fillProfile = (p: StoredProfile) => {
+    setMode(p.mode);
+    if (p.mode === "lab") {
+      const c = p.config as LabConfig;
+      setUsername(c.username);
+      setRole(c.role || "sre");
+      setHostname(c.hostname);
+      setOs(c.os || "ubuntu");
+      setScenario(c.scenario || "healthy");
+    } else if (p.mode === "ssh") {
+      const c = p.config as SSHConfig;
+      setSshHost(c.host);
+      setSshPort(String(c.port || 22));
+      setSshUser(c.username);
+      setSshPassword(c.password || "");
+    }
+  };
 
   const handleStart = () => {
     if (mode === "c2w") {
@@ -176,6 +253,81 @@ export default function Onboarding({ onComplete }: Props) {
           padding: "24px 20px",
         }}
       >
+        {/* Saved profiles */}
+        {profiles.length > 0 && !showProfiles && (
+          <div style={{ marginBottom: 16, textAlign: "center" }}>
+            <span
+              onClick={() => setShowProfiles(true)}
+              style={{
+                fontSize: 10,
+                color: "#6e7681",
+                fontFamily: "'SF Mono','Fira Code',monospace",
+                cursor: "pointer",
+                textDecoration: "underline",
+                textUnderlineOffset: 2,
+              }}
+            >
+              load saved profile ({profiles.length})
+            </span>
+          </div>
+        )}
+        {showProfiles && (
+          <div style={{ marginBottom: 16 }}>
+            <div
+              style={{
+                fontSize: 10,
+                color: "#6e7681",
+                letterSpacing: ".08em",
+                textTransform: "uppercase",
+                marginBottom: 6,
+              }}
+            >
+              saved profiles
+            </div>
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 4,
+                maxHeight: 160,
+                overflowY: "auto",
+              }}
+            >
+              {profiles.map((p) => (
+                <div
+                  key={p.name}
+                  onClick={() => {
+                    fillProfile(p);
+                    setShowProfiles(false);
+                  }}
+                  style={{
+                    cursor: "pointer",
+                    padding: "6px 8px",
+                    border: "1px solid #30363d",
+                    borderRadius: 4,
+                    fontSize: 11,
+                    color: "#c9d1d9",
+                    fontFamily: "'SF Mono','Fira Code',monospace",
+                    display: "flex",
+                    justifyContent: "space-between",
+                  }}
+                >
+                  <span>{p.name}</span>
+                  <span style={{ color: "#6e7681" }}>{p.mode}</span>
+                </div>
+              ))}
+            </div>
+            <div style={{ marginTop: 6, textAlign: "center" }}>
+              <span
+                onClick={() => setShowProfiles(false)}
+                style={{ fontSize: 10, color: "#6e7681", cursor: "pointer" }}
+              >
+                cancel
+              </span>
+            </div>
+          </div>
+        )}
+
         {/* Mode toggle */}
         <div
           style={{
@@ -493,6 +645,27 @@ export default function Onboarding({ onComplete }: Props) {
             </>
           )}
 
+          {mode === "c2w" && (
+            <div style={{ width: "100%" }}>
+              <button
+                onClick={handleStart}
+                style={{
+                  width: "100%",
+                  background: "transparent",
+                  border: "1px solid #aaa",
+                  borderRadius: 4,
+                  color: "#ccc",
+                  fontFamily: "'SF Mono','Fira Code',monospace",
+                  fontSize: 12,
+                  padding: "7px 16px",
+                  cursor: "pointer",
+                }}
+              >
+                boot debian →
+              </button>
+            </div>
+          )}
+
           {mode === "ssh" && (
             <div style={{ width: "100%" }}>
               <button
@@ -514,6 +687,52 @@ export default function Onboarding({ onComplete }: Props) {
               </button>
             </div>
           )}
+        </div>
+
+        {/* Save profile button */}
+        <div style={{ textAlign: "center", marginTop: 12 }}>
+          <span
+            onClick={() => {
+              const name = prompt("Name this profile:");
+              if (name) {
+                if (mode === "lab") {
+                  saveProfile(name, mode, {
+                    username: username.trim() || "user",
+                    hostname: hostname.trim() || randomHostname(),
+                    role,
+                    os,
+                    scenario,
+                  } as LabConfig);
+                } else if (mode === "ssh") {
+                  saveProfile(name, mode, {
+                    host: sshHost.trim(),
+                    port: parseInt(sshPort) || 22,
+                    username: sshUser.trim(),
+                    password: sshPassword,
+                  } as SSHConfig);
+                } else {
+                  saveProfile(name, mode, {
+                    username: username.trim() || "user",
+                    hostname: hostname.trim() || "debian",
+                    role,
+                    os,
+                    scenario,
+                  } as LabConfig);
+                }
+                setProfiles(loadProfiles());
+              }
+            }}
+            style={{
+              fontSize: 10,
+              color: "#6e7681",
+              fontFamily: "'SF Mono','Fira Code',monospace",
+              cursor: "pointer",
+              textDecoration: "underline",
+              textUnderlineOffset: 2,
+            }}
+          >
+            save as profile
+          </span>
         </div>
       </div>
     </div>
