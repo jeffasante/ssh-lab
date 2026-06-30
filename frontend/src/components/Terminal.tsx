@@ -91,6 +91,14 @@ export default function Terminal({
     }
   }, [lines]);
 
+  useEffect(() => {
+    if (!connected && pendingRef.current) {
+      pendingRef.current = false;
+      setPending(false);
+      setTimeout(() => inputRef.current?.focus(), 0);
+    }
+  }, [connected]);
+
   const submit = () => {
     const cmd = input.trim();
     setInput("");
@@ -114,7 +122,7 @@ export default function Terminal({
 
     // Block input until server responds with new lines.
     // Use liveCountRef (always current) instead of the closure's `lines` prop.
-    if (cmd) {
+    if (cmd && connected) {
       pendingRef.current = true;
       linesLenRef.current = liveCountRef.current; // ← always-current snapshot
       setPending(true);
@@ -795,7 +803,7 @@ export default function Terminal({
           autoCorrect="off"
           autoCapitalize="none"
           spellCheck={false}
-          disabled={pending}
+          disabled={pending && connected}
           style={{
             position: "absolute",
             opacity: 0,

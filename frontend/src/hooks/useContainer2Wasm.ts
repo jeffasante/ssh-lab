@@ -40,6 +40,15 @@ function makeTerminalBridge(onOutput: (text: string) => void) {
         },
       };
     },
+    onBinary: (cb: (data: string) => void) => {
+      listeners.push(cb);
+      return {
+        dispose: () => {
+          const i = listeners.indexOf(cb);
+          if (i >= 0) listeners.splice(i, 1);
+        },
+      };
+    },
     onResize: () => ({ dispose: () => {} }),
     write: (data: Uint8Array | string, cb?: () => void) => {
       const decoder = new TextDecoder();
@@ -80,9 +89,10 @@ export function useContainer2Wasm(
   useEffect(() => {
     if (!config || !imageUrl || initDone.current) return;
     initDone.current = true;
+    let cancelled = false;
 
     const doInit = async () => {
-      appendLine("Booting container...");
+      appendLine("Booting container...\n");
 
       const { master, slave } = openpty();
 
@@ -108,20 +118,60 @@ export function useContainer2Wasm(
       });
 
       // Create worker and TtyServer
-      const worker = new Worker("/c2w-src/worker-custom.js?v=" + Date.now());
+      const worker = new Worker("/c2w-src/worker-entry.js?v=" + Date.now());
+      if (cancelled) {
+        worker.terminate();
+        return;
+      }
       workerRef.current = worker;
-      const ttyServer = new TtyServer(slave);
-      ttyServer.start(worker);
+      appendLine("Worker created\n");
+      const handleWorkerMessage = (event: MessageEvent) => {
+        const msg = event.data;
+        if (!msg || typeof msg !== "object" || msg.ttyRequestType) return;
+        if (msg.type === "status") appendLine(`${msg.message}\n`);
+        if (msg.type === "error") {
+          appendLine(`Worker failed: ${msg.message}\n`);
+          setConnected(false);
+        }
+      };
+      worker.onerror = (event) => {
+        appendLine(`Worker failed: ${event.message}\n`);
+        setConnected(false);
+      };
+      worker.addEventListener("message", handleWorkerMessage);
 
-      // Send init with image URL
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      if (cancelled) {
+        worker.terminate();
+        return;
+      }
+
+      // Send init with image URL before xterm-pty posts the shared PTY buffer.
       worker.postMessage({ type: "init", imagename: imageUrl });
+      appendLine("Image selected\n");
+
+      const ttyServer = new TtyServer(slave);
+      ttyServer.start(worker, handleWorkerMessage);
+      const ptyMessageHandler = worker.onmessage;
+      worker.onmessage = (event) => {
+        handleWorkerMessage(event);
+        ptyMessageHandler?.call(worker, event);
+      };
+      appendLine("PTY attached\n");
 
       setConnected(true);
     };
 
-    doInit();
+    doInit().catch((error) => {
+      appendLine(`Container failed: ${error instanceof Error ? error.message : String(error)}\n`);
+      setConnected(false);
+      initDone.current = false;
+    });
     return () => {
+      cancelled = true;
       workerRef.current?.terminate();
+      workerRef.current = null;
+      initDone.current = false;
     };
   }, [config, imageUrl, appendLine]);
 

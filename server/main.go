@@ -321,7 +321,11 @@ node_cpu_seconds_total{cpu="0",mode="system"} %.0f
 		mux.ServeHTTP(w, r)
 	})
 
-	addr := ":8080"
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	addr := ":" + port
 	log.Printf("ssh-lab server listening on %s", addr)
 	log.Fatal(http.ListenAndServe(addr, handler))
 }

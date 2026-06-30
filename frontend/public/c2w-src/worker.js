@@ -1,13 +1,16 @@
-importScripts("https://cdn.jsdelivr.net/npm/xterm-pty@0.9.4/workerTools.js");
-importScripts(location.origin + "/container2wasm-demo" + "/src/browser_wasi_shim/index.js");
-importScripts(location.origin + "/container2wasm-demo" + "/src/browser_wasi_shim/wasi_defs.js");
-importScripts(location.origin + "/container2wasm-demo" + "/src/worker-util.js");
-importScripts(location.origin + "/container2wasm-demo" + "/src/wasi-util.js");
+importScripts("./workerTools.js");
+importScripts("./wasi/index.js");
+importScripts("./wasi/wasi_defs.js");
+importScripts("./wasi/worker-util.js");
+importScripts("./wasi/wasi-util.js");
+
+postMessage({type: "status", message: "worker.js ready"});
 
 onmessage = (msg) => {
     if (serveIfInitMsg(msg)) {
         return;
     }
+    postMessage({type: "status", message: "worker start"});
     var ttyClient = new TtyClient(msg.data);
     var args = [];
     var env = [];
@@ -40,6 +43,7 @@ onmessage = (msg) => {
             });
             return;
         }
+        postMessage({type: "status", message: "start wasi"});
         startWasi(wasm, ttyClient, args, env, fds, listenfd, 5);
     });
 };
@@ -61,7 +65,13 @@ function startWasi(wasm, ttyClient, args, env, fds, listenfd, connfd) {
     WebAssembly.instantiate(wasm, {
         "wasi_snapshot_preview1": wasi.wasiImport,
     }).then((inst) => {
+        postMessage({type: "status", message: "instantiated"});
         wasi.start(inst.instance);
+    }).catch((error) => {
+        postMessage({
+            type: "error",
+            message: error && error.stack ? error.stack : String(error)
+        });
     });
 }
 

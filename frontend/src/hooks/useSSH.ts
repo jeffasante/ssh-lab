@@ -53,7 +53,7 @@ export function useSSH(
   const [lines, setLines] = useState<OutputLine[]>([]);
   const [services, setServices] = useState<Record<string, ServiceInfo>>({});
   const [nanoFile, setNanoFile] = useState<NanoFile | null>(null);
-  const inited = useRef(false);
+  const activeConnectionKey = useRef<string | null>(null);
   const isSSH = sshConfig === "wasm" ? false : !!sshConfig;
   const isWasm = sshConfig === "wasm";
 
@@ -64,8 +64,20 @@ export function useSSH(
   const clearLines = useCallback(() => setLines([]), []);
 
   useEffect(() => {
-    if (inited.current) return;
-    inited.current = true;
+    const connectionKey = isWasm
+      ? config
+        ? `wasm:${JSON.stringify(config)}`
+        : null
+      : isSSH
+        ? `ssh:${JSON.stringify(sshConfig)}`
+        : config
+          ? `lab:${JSON.stringify(config)}`
+          : null;
+
+    if (!connectionKey || activeConnectionKey.current === connectionKey) return;
+    activeConnectionKey.current = connectionKey;
+    ws.current?.close();
+    setConnected(false);
 
     if (isWasm) {
       // WASM mode — connect to WebSocket and trigger wasmtime on server
@@ -177,7 +189,10 @@ export function useSSH(
       const sock = new WebSocket(WS_URL);
       ws.current = sock;
 
-      sock.onopen = () => setConnected(true);
+      sock.onopen = () => {
+        sock.send(JSON.stringify({ mode: "lab" }));
+        setConnected(true);
+      };
       sock.onclose = () => setConnected(false);
 
       sock.onmessage = (e) => {
@@ -199,7 +214,7 @@ export function useSSH(
     return () => {
       ws.current?.close();
     };
-  }, [config, sshConfig, isSSH, appendLines]);
+  }, [config, sshConfig, isSSH, isWasm, appendLines]);
 
   const sendCommand = useCallback(
     (cmd: string) => {

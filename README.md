@@ -48,11 +48,15 @@ docker compose up --build
 
 ```bash
 # Terminal 1 — backend
-cd server && go run main.go
+cd server && go run .
 
 # Terminal 2 — frontend
 cd frontend && npm install && npm run dev
 # Open http://localhost:5173
+
+# If port 8080 is already in use:
+# Terminal 1 — PORT=8081 go run .
+# Terminal 2 — VITE_SSH_LAB_SERVER_URL=http://localhost:8081 npm run dev
 
 # For WASM mode instead:
 # Open http://localhost:5173?mode=wasm

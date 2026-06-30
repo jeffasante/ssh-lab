@@ -22,6 +22,7 @@ function serveIfInitMsg(msg) {
             if (req_.imagename)
                 imagename = req_.imagename;
             numchunks = req_.chunks;
+            postMessage({ type: "status", message: "init " + imagename });
             return true;
         }
     }
@@ -38,6 +39,25 @@ function getImagename() {
 function fetchChunks(f) {
     var prefix = imagename;
     var chunks = numchunks;
+    if (!chunks) {
+        postMessage({ type: "status", message: "fetch " + prefix });
+        fetch(prefix).then(resp => {
+            if (!resp.ok) {
+                throw new Error("failed to fetch " + prefix + ": " + resp.status);
+            }
+            postMessage({ type: "status", message: "fetched " + prefix });
+            return resp.arrayBuffer();
+        }).then(ab => {
+            postMessage({ type: "status", message: "wasm bytes " + ab.byteLength });
+            f(ab);
+        }).catch(error => {
+            postMessage({
+                type: "error",
+                message: error && error.stack ? error.stack : String(error)
+            });
+        });
+        return;
+    }
     var format = s => prefix + s + '.wasm';
     var files = [];
     for (i = 0; i < chunks; i++) {

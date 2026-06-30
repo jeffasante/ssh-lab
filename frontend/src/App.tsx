@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useSSH } from "./hooks/useSSH";
 import { useWasmSSH } from "./hooks/useWasmSSH";
+import { useContainer2Wasm } from "./hooks/useContainer2Wasm";
 
 import Terminal from "./components/Terminal";
 import Sidebar from "./components/Sidebar";
@@ -88,16 +89,16 @@ export default function App() {
   const isC2W = appMode === "c2w";
   const isSSH = appMode === "ssh";
   const useWasm = mode === "wasm" && !isC2W;
-  const labConfig = isLab ? (config as LabConfig) : null;
+  const labConfig = isLab || isC2W ? (config as LabConfig) : null;
 
   const labResult = useSSH(
     isSSH ? null : isLab ? labConfig : null,
     isSSH ? (config as SSHConfig) : undefined,
   );
   const wasmResult = useWasmSSH(isLab ? labConfig : null);
-  const c2wResult = useSSH(
+  const c2wResult = useContainer2Wasm(
     isC2W ? labConfig : null,
-    isC2W ? "wasm" : undefined,
+    "/c2w/debian.wasm",
   );
 
   const hookResult = isC2W
@@ -300,7 +301,7 @@ export default function App() {
           onCommand={handleCommand}
           onClear={clearLines}
           connected={connected}
-          username={isLab ? (config as LabConfig).username : ""}
+          username={isLab || isC2W ? (config as LabConfig).username : ""}
           hostname={hostname}
           nanoFile={nanoFile}
           setNanoFile={setNanoFile}
