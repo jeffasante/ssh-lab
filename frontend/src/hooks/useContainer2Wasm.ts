@@ -15,8 +15,8 @@ type UseSSHReturn = {
 
 export const C2W_IMAGES: Record<string, { url: string; label: string }> = {
   debian: {
-    url: "https://ktock.github.io/container2wasm-demo/containers/riscv64-debian-wasi-container02.wasm",
-    label: "Debian (remote)",
+    url: "/c2w/debian.wasm",
+    label: "Debian (129MB)",
   },
 };
 

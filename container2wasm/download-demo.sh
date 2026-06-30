@@ -1,32 +1,48 @@
 #!/bin/bash
-# Download container2wasm demo images
-# Source: https://ktock.github.io/container2wasm-demo/
+# Download container2wasm demo images (split into chunks on GitHub Pages)
 set -e
 
 OUTDIR="${1:-./images}"
-mkdir -p "$OUTDIR"
+BASEURL="https://ktock.github.io/container2wasm-demo/containers"
 
-DEMOS=(
-  "https://ktock.github.io/container2wasm-demo/debian.wasm"
-  "https://ktock.github.io/container2wasm-demo/python.wasm"
-  "https://ktock.github.io/container2wasm-demo/node.wasm"
-  "https://ktock.github.io/container2wasm-demo/vim.wasm"
-  "https://ktock.github.io/container2wasm-demo/debian-curl.wasm"
+IMAGES=(
+  "riscv64-debian-wasi"
 )
 
-echo "Downloading container2wasm demo images to $OUTDIR..."
-for url in "${DEMOS[@]}"; do
-  filename=$(basename "$url")
-  if [ -f "$OUTDIR/$filename" ]; then
-    echo "  ✓ $filename (cached)"
+mkdir -p "$OUTDIR"
+
+for img in "${IMAGES[@]}"; do
+  echo "Downloading $img..."
+
+  # Download all chunks
+  chunks=0
+  for i in $(seq -f "%02g" 0 99); do
+    url="$BASEURL/${img}-container$i.wasm"
+    code=$(curl -sL -o /dev/null -w "%{http_code}" "$url")
+    if [ "$code" != "200" ]; then
+      break
+    fi
+    echo "  chunk $i (HTTP $code)"
+    curl -sL "$url" -o "$OUTDIR/${img}-chunk-$i.wasm" &
+    chunks=$((chunks + 1))
+  done
+  wait
+
+  # Merge chunks
+  if [ $chunks -gt 0 ]; then
+    echo "Merging $chunks chunks..."
+    > "$OUTDIR/$img.wasm"
+    for i in $(seq -f "%02g" 0 $((chunks - 1))); do
+      cat "$OUTDIR/${img}-chunk-$i.wasm" >> "$OUTDIR/$img.wasm"
+      rm "$OUTDIR/${img}-chunk-$i.wasm"
+    done
+    size=$(du -h "$OUTDIR/$img.wasm" | cut -f1)
+    echo "  done ($size)"
   else
-    echo "  ↓ $filename..."
-    curl -sL "$url" -o "$OUTDIR/$filename"
-    size=$(du -h "$OUTDIR/$filename" | cut -f1)
-    echo "    done ($size)"
+    echo "  no chunks found at $BASEURL"
   fi
 done
 
 echo ""
-echo "All images downloaded. Total:"
-du -sh "$OUTDIR"
+echo "Images in $OUTDIR:"
+ls -lh "$OUTDIR"/*.wasm 2>/dev/null || echo "(none)"
