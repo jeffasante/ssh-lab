@@ -13,7 +13,7 @@ export type SSHConfig = {
   password: string;
 };
 
-export type AppMode = "lab" | "ssh";
+export type AppMode = "lab" | "ssh" | "c2w";
 
 export type ScenarioId =
   | "healthy"

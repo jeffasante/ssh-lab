@@ -51,7 +51,18 @@ export default function Onboarding({ onComplete }: Props) {
   const [sshPassword, setSshPassword] = useState("");
 
   const handleStart = () => {
-    if (mode === "ssh") {
+    if (mode === "c2w") {
+      onComplete(
+        {
+          username: username.trim() || "user",
+          hostname: hostname.trim() || "debian",
+          role,
+          os,
+          scenario: scenario as LabConfig["scenario"],
+        },
+        "c2w",
+      );
+    } else if (mode === "ssh") {
       onComplete(
         {
           host: sshHost.trim(),
@@ -180,14 +191,29 @@ export default function Onboarding({ onComplete }: Props) {
               fontSize: 11,
               fontFamily: "'SF Mono','Fira Code',monospace",
               cursor: "pointer",
-              padding: "5px 14px",
+              padding: "5px 10px",
               border: `1px solid ${mode === "lab" ? activeColor : "#30363d"}`,
               borderRadius: "4px 0 0 4px",
               color: mode === "lab" ? activeColor : "#6e7681",
               background: mode === "lab" ? "#0d1117" : "transparent",
             }}
           >
-            Lab Mode
+            Lab
+          </span>
+          <span
+            onClick={() => setMode("c2w")}
+            style={{
+              fontSize: 11,
+              fontFamily: "'SF Mono','Fira Code',monospace",
+              cursor: "pointer",
+              padding: "5px 10px",
+              border: `1px solid ${mode === "c2w" ? activeColor : "#30363d"}`,
+              borderRadius: 0,
+              color: mode === "c2w" ? activeColor : "#6e7681",
+              background: mode === "c2w" ? "#0d1117" : "transparent",
+            }}
+          >
+            Debian
           </span>
           <span
             onClick={() => setMode("ssh")}
@@ -195,14 +221,14 @@ export default function Onboarding({ onComplete }: Props) {
               fontSize: 11,
               fontFamily: "'SF Mono','Fira Code',monospace",
               cursor: "pointer",
-              padding: "5px 14px",
+              padding: "5px 10px",
               border: `1px solid ${mode === "ssh" ? activeColor : "#30363d"}`,
               borderRadius: "0 4px 4px 0",
               color: mode === "ssh" ? activeColor : "#6e7681",
               background: mode === "ssh" ? "#0d1117" : "transparent",
             }}
           >
-            SSH Mode
+            SSH
           </span>
         </div>
 

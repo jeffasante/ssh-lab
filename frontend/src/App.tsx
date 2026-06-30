@@ -31,7 +31,7 @@ function loadConfig(): AppConfig | null {
 function loadMode(): AppMode {
   try {
     const m = localStorage.getItem("ssh-lab-app-mode") as AppMode | null;
-    if (m === "ssh") return "ssh";
+    if (m === "ssh" || m === "c2w") return m;
   } catch {}
   return "lab";
 }
@@ -88,12 +88,14 @@ export default function App() {
   const labConfig = isLab ? (config as LabConfig) : null;
 
   let hookResult: ReturnType<typeof useSSH>;
-  if (mode === "c2w") {
+  if (appMode === "c2w") {
     const imageKey = Object.keys(C2W_IMAGES)[0];
     hookResult = useContainer2Wasm(labConfig, imageKey);
+  } else if (appMode === "ssh") {
+    hookResult = useSSH(null, config as SSHConfig);
   } else {
     const sshHooks = mode === "wasm" ? useWasmSSH : useSSH;
-    hookResult = sshHooks(labConfig, isLab ? undefined : (config as SSHConfig));
+    hookResult = sshHooks(labConfig);
   }
   const {
     lines,
@@ -151,9 +153,12 @@ export default function App() {
 
   // (moved above)
 
-  const hostname = isLab
-    ? (config as LabConfig).hostname
-    : (config as SSHConfig).host;
+  const hostname =
+    appMode === "lab"
+      ? (config as LabConfig).hostname
+      : appMode === "ssh"
+        ? (config as SSHConfig).host
+        : "debian";
 
   return (
     <div
@@ -202,7 +207,9 @@ export default function App() {
               fontFamily: "monospace",
             }}
           >
-            {isMobile ? hostname : `${hostname} · ${isLab ? "Lab" : "SSH"}`}
+            {isMobile
+              ? hostname
+              : `${hostname} · ${appMode === "lab" ? "Lab" : appMode === "ssh" ? "SSH" : "Debian"}`}
           </span>
           <span
             onClick={() => {
@@ -289,7 +296,7 @@ export default function App() {
           setNanoFile={setNanoFile}
           theme={theme}
         />
-        {isLab && mode !== "c2w" && (
+        {appMode === "lab" && (
           <Sidebar
             services={services}
             connected={connected}
