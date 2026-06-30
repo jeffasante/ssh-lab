@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useSSH } from "./hooks/useSSH";
 import { useWasmSSH } from "./hooks/useWasmSSH";
+import { useContainer2Wasm } from "./hooks/useContainer2Wasm";
 import Terminal from "./components/Terminal";
 import Sidebar from "./components/Sidebar";
 import Onboarding from "./components/Onboarding";
@@ -89,27 +90,23 @@ export default function App() {
   const useWasm = mode === "wasm" && !isC2W;
   const labConfig = isLab ? (config as LabConfig) : null;
 
-  // If Debian mode, open the working demo page and go back to lab
-  useEffect(() => {
-    if (isC2W) {
-      window.open(
-        "https://ktock.github.io/container2wasm-demo/riscv64-debian.html",
-        "_blank",
-      );
-      setAppMode("lab");
-      setConfig(null);
-      localStorage.removeItem("ssh-lab-config");
-      localStorage.removeItem("ssh-lab-app-mode");
-    }
-  }, [isC2W]);
-
   const labResult = useSSH(
     isSSH ? null : isLab ? labConfig : null,
     isSSH ? (config as SSHConfig) : undefined,
   );
-  const wasmResult = useWasmSSH(isC2W || isSSH ? null : labConfig);
+  const wasmResult = useWasmSSH(isLab ? labConfig : null);
+  const c2wResult = useContainer2Wasm(
+    isC2W ? labConfig : null,
+    isC2W ? "/c2w/debian.wasm" : undefined,
+  );
 
-  const hookResult = isSSH ? labResult : useWasm ? wasmResult : labResult;
+  const hookResult = isC2W
+    ? c2wResult
+    : isSSH
+      ? labResult
+      : useWasm
+        ? wasmResult
+        : labResult;
   const {
     lines,
     services,
@@ -298,30 +295,17 @@ export default function App() {
           position: "relative",
         }}
       >
-        {appMode === "c2w" ? (
-          <iframe
-            src="https://ktock.github.io/container2wasm-demo/riscv64-debian.html"
-            style={{
-              width: "100%",
-              height: "100%",
-              border: "none",
-              background: "#000",
-            }}
-            title="Debian"
-          />
-        ) : (
-          <Terminal
-            lines={lines}
-            onCommand={handleCommand}
-            onClear={clearLines}
-            connected={connected}
-            username={isLab ? (config as LabConfig).username : ""}
-            hostname={hostname}
-            nanoFile={nanoFile}
-            setNanoFile={setNanoFile}
-            theme={theme}
-          />
-        )}
+        <Terminal
+          lines={lines}
+          onCommand={handleCommand}
+          onClear={clearLines}
+          connected={connected}
+          username={isLab ? (config as LabConfig).username : ""}
+          hostname={hostname}
+          nanoFile={nanoFile}
+          setNanoFile={setNanoFile}
+          theme={theme}
+        />
         {appMode === "lab" && (
           <Sidebar
             services={services}
