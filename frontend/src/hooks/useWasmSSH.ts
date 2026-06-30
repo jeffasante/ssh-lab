@@ -42,10 +42,16 @@ async function loadWasm(): Promise<void> {
   go.run(result.instance);
 }
 
+let _wasmCounter = 0;
+
 export function useWasmSSH(
   config: LabConfig | null,
   _sshConfig?: SSHConfig,
 ): UseSSHReturn {
+  const instanceId = useRef(`useWasmSSH-${++_wasmCounter}`);
+  console.log(
+    `[DEBUG ${instanceId.current}] RENDER config=${JSON.stringify(config?.hostname ?? null)}`,
+  );
   const ws = useRef<WebSocket | null>(null);
   const [connected, setConnected] = useState(false);
   const [lines, setLines] = useState<OutputLine[]>([]);
@@ -61,14 +67,21 @@ export function useWasmSSH(
   const clearLines = useCallback(() => setLines([]), []);
 
   useEffect(() => {
+    console.log(
+      `[DEBUG ${instanceId.current}] EFFECT RUN config=${!!config} initDone=${initDone.current}`,
+    );
     if (!config || initDone.current) return;
     initDone.current = true;
+    console.log(
+      `[DEBUG ${instanceId.current}] EFFECT PROCEEDING — loading WASM`,
+    );
 
     const init = async () => {
       try {
         await loadWasm();
 
         // Initialize with config
+        console.log(`[DEBUG ${instanceId.current}] Calling window.initLab`);
         const initResult = window.initLab!(
           JSON.stringify({
             hostname: config.hostname,
@@ -109,11 +122,17 @@ export function useWasmSSH(
 
   const sendCommand = useCallback(
     (cmd: string) => {
+      console.log(
+        `[DEBUG ${instanceId.current}] sendCommand(${JSON.stringify(cmd)})`,
+      );
       if (!window.processCommand) return;
 
       const json = window.processCommand(cmd);
       const resp: CommandResponse = JSON.parse(json);
 
+      console.log(
+        `[DEBUG ${instanceId.current}] processCommand returned ${resp.lines?.length ?? 0} lines`,
+      );
       if (resp.lines) appendLines(resp.lines);
       if (resp.services) setServices(resp.services);
     },

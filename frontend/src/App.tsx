@@ -1,13 +1,20 @@
-import React, { useState, useEffect, useMemo } from "react";
-import { useSSH } from "./hooks/useSSH";
-import { useWasmSSH } from "./hooks/useWasmSSH";
-import { useContainer2Wasm } from "./hooks/useContainer2Wasm";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
+import {
+  LabConfig,
+  SSHConfig,
+  AppMode,
+  TerminalSession,
+  generateSessionId,
+  sessionTitle,
+  defaultSessionConfig,
+} from "./types";
 
 import Terminal from "./components/Terminal";
 import Sidebar from "./components/Sidebar";
 import Onboarding from "./components/Onboarding";
 import ThemePicker from "./components/ThemePicker";
-import { LabConfig, SSHConfig, AppMode } from "./types";
+import TabBar from "./components/TabBar";
+import SessionTerminal from "./components/SessionTerminal";
 import { getTheme, ThemeId, themeList } from "./themes";
 
 const CONFIG_VERSION = 2;
@@ -20,9 +27,7 @@ function loadConfig(): AppConfig | null {
     if (!raw) return null;
     const cfg = JSON.parse(raw);
     if (!cfg || typeof cfg !== "object") return null;
-    // Validate as LabConfig (has hostname + username)
     if (cfg.hostname && cfg.username) return cfg as AppConfig;
-    // Validate as SSHConfig (has host)
     if (cfg.host) return cfg as AppConfig;
     return null;
   } catch {}
@@ -65,10 +70,33 @@ function loadTheme(): ThemeId {
   return "monochrome";
 }
 
+function buildInitialSessions(
+  config: AppConfig,
+  mode: AppMode,
+): TerminalSession[] {
+  const id = generateSessionId();
+  return [
+    {
+      id,
+      title: sessionTitle(mode, config),
+      mode,
+      config,
+    },
+  ];
+}
+
 export default function App() {
   const [config, setConfig] = useState<AppConfig | null>(loadConfig);
+  const [appMode, setAppMode] = useState<AppMode>(loadMode);
   const [isMobile, setIsMobile] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const [sessions, setSessions] = useState<TerminalSession[]>(() =>
+    config ? buildInitialSessions(config, loadMode()) : [],
+  );
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(
+    () => sessions[0]?.id ?? null,
+  );
 
   useEffect(() => {
     const checkMobile = () => {
@@ -79,51 +107,15 @@ export default function App() {
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
-  const [appMode, setAppMode] = useState<AppMode>(loadMode);
   const [themeId, setThemeId] = useState<ThemeId>(loadTheme);
-  const mode = useMemo(getRunMode, []);
-
+  const runMode = useMemo(getRunMode, []);
   const theme = useMemo(() => getTheme(themeId), [themeId]);
 
-  const isLab = appMode === "lab";
-  const isC2W = appMode === "c2w";
-  const isSSH = appMode === "ssh";
-  const useWasm = mode === "wasm" && !isC2W;
-  const labConfig = isLab || isC2W ? (config as LabConfig) : null;
+  const activeSession =
+    sessions.find((s) => s.id === activeSessionId) ?? sessions[0] ?? null;
 
-  const labResult = useSSH(
-    isSSH ? null : isLab ? labConfig : null,
-    isSSH ? (config as SSHConfig) : undefined,
-  );
-  const wasmResult = useWasmSSH(isLab ? labConfig : null);
-  const c2wResult = useContainer2Wasm(
-    isC2W ? labConfig : null,
-    "/c2w/debian.wasm",
-  );
-
-  const hookResult = isC2W
-    ? c2wResult
-    : isSSH
-      ? labResult
-      : useWasm
-        ? wasmResult
-        : labResult;
-  const {
-    lines,
-    services,
-    connected,
-    sendCommand,
-    clearLines,
-    nanoFile,
-    setNanoFile,
-  } = hookResult;
-
-  const handleCommand = (cmd: string) => {
-    sendCommand(cmd);
-  };
-
-  // Inject CSS variables into document root — MUST be before any early return
-  React.useEffect(() => {
+  // Inject CSS variables into document root
+  useEffect(() => {
     const root = document.documentElement;
     root.style.setProperty("--theme-bg", theme.bg);
     root.style.setProperty("--theme-bg-alt", theme.bgAlt);
@@ -150,25 +142,62 @@ export default function App() {
     document.head.appendChild(sheet);
   }, [theme]);
 
-  if (!config) {
-    return (
-      <Onboarding
-        onComplete={(c, m) => {
-          saveConfig(c, m);
-          setAppMode(m);
-          setConfig(c);
-        }}
-      />
-    );
+  const handleOnboardingComplete = useCallback((c: AppConfig, m: AppMode) => {
+    saveConfig(c, m);
+    setAppMode(m);
+    setConfig(c);
+    const newSessions = buildInitialSessions(c, m);
+    setSessions(newSessions);
+    setActiveSessionId(newSessions[0].id);
+  }, []);
+
+  const handleAddTab = useCallback(() => {
+    const cfg = defaultSessionConfig();
+    const newSession: TerminalSession = {
+      id: generateSessionId(),
+      title: sessionTitle("lab", cfg),
+      mode: "lab",
+      config: cfg,
+    };
+    setSessions((prev) => [...prev, newSession]);
+    setActiveSessionId(newSession.id);
+  }, []);
+
+  const handleCloseTab = useCallback(
+    (id: string) => {
+      setSessions((prev) => {
+        const idx = prev.findIndex((s) => s.id === id);
+        if (idx === -1 || prev.length <= 1) return prev;
+        const next = prev.filter((s) => s.id !== id);
+        return next;
+      });
+      setActiveSessionId((prevId) => {
+        if (prevId !== id) return prevId;
+        const idx = sessions.findIndex((s) => s.id === id);
+        if (idx === -1) return sessions[0]?.id ?? null;
+        // Switch to neighbour
+        if (idx > 0) return sessions[idx - 1].id;
+        if (idx < sessions.length - 1) return sessions[idx + 1].id;
+        return sessions[0]?.id ?? null;
+      });
+    },
+    [sessions],
+  );
+
+  const handleSelectTab = useCallback((id: string) => {
+    setActiveSessionId(id);
+  }, []);
+
+  // ---- Onboarding ----
+  if (!config || sessions.length === 0) {
+    return <Onboarding onComplete={handleOnboardingComplete} />;
   }
 
-  // (moved above)
-
   const hostname =
-    appMode === "lab"
-      ? (config as LabConfig).hostname
-      : appMode === "ssh"
-        ? (config as SSHConfig).host
+    activeSession?.mode === "lab"
+      ? ((activeSession.config as LabConfig)?.hostname ?? "")
+      : activeSession?.mode === "ssh"
+        ? ((activeSession.config as SSHConfig)?.host ?? "")
         : "debian";
 
   return (
@@ -220,13 +249,15 @@ export default function App() {
           >
             {isMobile
               ? hostname
-              : `${hostname} · ${appMode === "lab" ? "Lab" : appMode === "ssh" ? "SSH" : "Debian"}`}
+              : `${hostname} · ${sessions.length} tab${sessions.length !== 1 ? "s" : ""}`}
           </span>
           <span
             onClick={() => {
               localStorage.removeItem("ssh-lab-config");
               localStorage.removeItem("ssh-lab-app-mode");
               setConfig(null);
+              setSessions([]);
+              setActiveSessionId(null);
             }}
             style={{
               fontSize: 10,
@@ -241,7 +272,7 @@ export default function App() {
           </span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {isMobile && isLab && (
+          {isMobile && activeSession?.mode === "lab" && (
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
               style={{
@@ -272,7 +303,7 @@ export default function App() {
               width: 6,
               height: 6,
               borderRadius: "50%",
-              background: connected ? theme.accent : theme.accentErr,
+              background: theme.accent,
             }}
           />
           <span
@@ -282,10 +313,20 @@ export default function App() {
               fontFamily: "monospace",
             }}
           >
-            {connected ? "connected" : "disconnected"}
+            {sessions.length} tab{sessions.length !== 1 ? "s" : ""}
           </span>
         </div>
       </div>
+
+      {/* Tab bar */}
+      <TabBar
+        sessions={sessions}
+        activeSessionId={activeSessionId}
+        onSelect={handleSelectTab}
+        onClose={handleCloseTab}
+        onAdd={handleAddTab}
+        theme={theme}
+      />
 
       {/* Main area */}
       <div
@@ -296,37 +337,18 @@ export default function App() {
           position: "relative",
         }}
       >
-        <Terminal
-          lines={lines}
-          onCommand={handleCommand}
-          onClear={clearLines}
-          connected={connected}
-          username={isLab || isC2W ? (config as LabConfig).username : ""}
-          hostname={hostname}
-          nanoFile={nanoFile}
-          setNanoFile={setNanoFile}
-          theme={theme}
-        />
-        {appMode === "lab" && (
-          <Sidebar
-            services={services}
-            connected={connected}
+        {/* Render all sessions — only active one visible, others keep running */}
+        {sessions.map((s) => (
+          <SessionTerminal
+            key={s.id}
+            mode={s.mode}
+            config={s.config}
             theme={theme}
-            style={
-              isMobile
-                ? {
-                    position: "absolute",
-                    right: 0,
-                    top: 0,
-                    bottom: 0,
-                    zIndex: 100,
-                    boxShadow: "-4px 0 16px rgba(0,0,0,0.5)",
-                    display: sidebarOpen ? "flex" : "none",
-                  }
-                : {}
-            }
+            isActive={s.id === activeSessionId}
+            runMode={runMode}
           />
-        )}
+        ))}
+
         {isMobile && sidebarOpen && (
           <div
             onClick={() => setSidebarOpen(false)}

@@ -15,11 +15,54 @@ export type SSHConfig = {
 
 export type AppMode = "lab" | "ssh" | "c2w";
 
+export type TerminalSession = {
+  id: string;
+  title: string;
+  mode: AppMode;
+  config: LabConfig | SSHConfig | null;
+};
+
 export type ScenarioId =
   | "healthy"
   | "services-down"
   | "high-load"
   | "disk-full";
+
+let sessionCounter = 0;
+
+export function generateSessionId(): string {
+  sessionCounter++;
+  return `session-${Date.now()}-${sessionCounter}`;
+}
+
+export function sessionTitle(
+  mode: AppMode,
+  config: LabConfig | SSHConfig | null,
+): string {
+  if (!config) return mode;
+  if (mode === "ssh") {
+    const ssh = config as SSHConfig;
+    return `${ssh.username}@${ssh.host}`;
+  }
+  if (mode === "lab") {
+    const lab = config as LabConfig;
+    return `${lab.username}@${lab.hostname}`;
+  }
+  // c2w
+  const lab2 = config as LabConfig;
+  return `${lab2.username}@container`;
+}
+
+export function defaultSessionConfig(): LabConfig {
+  const suffix = Math.random().toString(36).substring(2, 6);
+  return {
+    username: "user",
+    hostname: "local-" + suffix,
+    role: "dev",
+    os: "ubuntu",
+    scenario: "healthy",
+  };
+}
 
 export const OS_PRESETS: Record<
   string,

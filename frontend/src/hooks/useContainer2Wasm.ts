@@ -65,18 +65,30 @@ function makeTerminalBridge(onOutput: (text: string) => void) {
   };
 }
 
+let _c2wCounter = 0;
+
 export function useContainer2Wasm(
   config: LabConfig | null,
   imageUrl?: string,
 ): UseSSHReturn {
+  const instanceId = useRef(`c2w-${++_c2wCounter}`);
+  console.log(
+    `[DEBUG ${instanceId.current}] RENDER config=${JSON.stringify(config?.hostname ?? null)} imageUrl=${imageUrl}`,
+  );
   const [connected, setConnected] = useState(false);
   const [lines, setLines] = useState<OutputLine[]>([]);
+  const masterRef = useRef<any>(null);
   const bridgeRef = useRef<ReturnType<typeof makeTerminalBridge> | null>(null);
   const workerRef = useRef<Worker | null>(null);
   const initDone = useRef(false);
   const bufRef = useRef("");
 
   const appendLine = useCallback((text: string) => {
+    if (text.length > 0) {
+      console.log(
+        `[DEBUG ${instanceId.current}] appendLine(${JSON.stringify(text.slice(0, 60))})`,
+      );
+    }
     bufRef.current += text;
     const parts = bufRef.current.split("\n");
     bufRef.current = parts.pop() || "";
@@ -87,14 +99,19 @@ export function useContainer2Wasm(
   const clearLines = useCallback(() => setLines([]), []);
 
   useEffect(() => {
+    console.log(
+      `[DEBUG ${instanceId.current}] EFFECT RUN config=${!!config} imageUrl=${imageUrl} initDone=${initDone.current}`,
+    );
     if (!config || !imageUrl || initDone.current) return;
     initDone.current = true;
+    console.log(`[DEBUG ${instanceId.current}] EFFECT PROCEEDING`);
     let cancelled = false;
 
     const doInit = async () => {
       appendLine("Booting container...\n");
 
       const { master, slave } = openpty();
+      masterRef.current = master;
 
       // Configure termios like the example
       const t = slave.ioctl("TCGETS");
@@ -106,16 +123,15 @@ export function useContainer2Wasm(
         new Termios(t.iflag, t.oflag, t.cflag, t.lflag, t.cc),
       );
 
-      // Create terminal bridge and activate the master addon
+      // Create terminal bridge and activate the master addon.
+      // activate() already wires up bidirectional I/O:
+      //   user input  → bridge.onData → bridge.send → PTY slave
+      //   PTY output  → master → bridge.write → display
+      // Do NOT add a separate master.onWrite handler — that would
+      // cause every output chunk to be written to the display twice.
       const bridge = makeTerminalBridge((text) => appendLine(text));
       bridgeRef.current = bridge;
       master.activate(bridge);
-
-      // Forward PTY master output as well (for raw data)
-      master.onWrite(([data]: [Uint8Array]) => {
-        const decoder = new TextDecoder();
-        bridge.write(data);
-      });
 
       // Create worker and TtyServer
       const worker = new Worker("/c2w-src/worker-entry.js?v=" + Date.now());
@@ -138,7 +154,6 @@ export function useContainer2Wasm(
         appendLine(`Worker failed: ${event.message}\n`);
         setConnected(false);
       };
-      worker.addEventListener("message", handleWorkerMessage);
 
       await new Promise((resolve) => setTimeout(resolve, 1000));
       if (cancelled) {
@@ -151,7 +166,12 @@ export function useContainer2Wasm(
       appendLine("Image selected\n");
 
       const ttyServer = new TtyServer(slave);
-      ttyServer.start(worker, handleWorkerMessage);
+      // start() sets worker.onmessage to its internal handler. We save that
+      // as ptyMessageHandler, then replace it with our own dispatch.
+      // handleWorkerMessage is only called from our override — do NOT pass
+      // it to ttyServer.start or it would fire twice (once from TtyServer's
+      // internal dispatch and once from our override).
+      ttyServer.start(worker, () => {});
       const ptyMessageHandler = worker.onmessage;
       worker.onmessage = (event) => {
         handleWorkerMessage(event);
@@ -163,7 +183,9 @@ export function useContainer2Wasm(
     };
 
     doInit().catch((error) => {
-      appendLine(`Container failed: ${error instanceof Error ? error.message : String(error)}\n`);
+      appendLine(
+        `Container failed: ${error instanceof Error ? error.message : String(error)}\n`,
+      );
       setConnected(false);
       initDone.current = false;
     });
@@ -171,11 +193,17 @@ export function useContainer2Wasm(
       cancelled = true;
       workerRef.current?.terminate();
       workerRef.current = null;
+      masterRef.current?.dispose();
+      masterRef.current = null;
+      bridgeRef.current = null;
       initDone.current = false;
     };
   }, [config, imageUrl, appendLine]);
 
   const sendCommand = useCallback((cmd: string) => {
+    console.log(
+      `[DEBUG ${instanceId.current}] sendCommand(${JSON.stringify(cmd)})`,
+    );
     bridgeRef.current?.send(cmd + "\n");
   }, []);
 
