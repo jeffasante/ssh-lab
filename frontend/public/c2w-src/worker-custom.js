@@ -32,15 +32,35 @@ onmessage = (msg) => {
 };
 
 function startContainer(wasmBuffer, ttyClient) {
-  var args = ["arg0"];
-  var env = [];
-  var fds = [
-    undefined, // 0: stdin
-    undefined, // 1: stdout
-    undefined, // 2: stderr
-  ];
+    // Debug: check buffer size
+    console.log('Worker: received WASM buffer of ' + wasmBuffer.byteLength + ' bytes');
+    if (wasmBuffer.byteLength === 0) {
+        console.error('Worker: WASM buffer is empty!');
+        return;
+    }
 
-  var wasi = new WASI(args, env, fds);
+    var args = ['arg0'];
+    var env = [];
+    // Add socket file descriptors and networking proxy env vars
+    var listenfd = 3;
+    var connfd = 5;
+    var fds = [
+        undefined, // 0: stdin
+        undefined, // 1: stdout
+        undefined, // 2: stderr
+        undefined, // 3: cert dir
+        undefined, // 4: socket listen
+        undefined, // 5: accepted socket
+    ];
+    env = [
+        "SSL_CERT_FILE=/.wasmenv/proxy.crt",
+        "https_proxy=http://192.168.127.253:80",
+        "http_proxy=http://192.168.127.253:80",
+        "HTTPS_PROXY=http://192.168.127.253:80",
+        "HTTP_PROXY=http://192.168.127.253:80"
+    ];
+
+    var wasi = new WASI(args, env, fds);
 
   // Patch fd_read/fd_write for TtyClient I/O
   var _fd_read = wasi.wasiImport.fd_read;
@@ -83,9 +103,40 @@ function startContainer(wasmBuffer, ttyClient) {
     return _fd_write(fd, iovs_ptr, iovs_len, nwritten_ptr);
   };
 
+  // Add stub for sock_accept and other socket functions the WASM might need
+  wasi.wasiImport.sock_accept = (fd, flags, fd_ptr) => {
+      return 6; // ERRNO_AGAIN — no connections
+  };
+  wasi.wasiImport.sock_open = (fd, flags, fd_ptr) => {
+      return 6; // ERRNO_AGAIN
+  };
+  wasi.wasiImport.sock_shutdown = (fd, how) => {
+      return 0; // success
+  };
+  wasi.wasiImport.sock_connect = (fd, addr, addr_len, ret_fd) => {
+      return 6; // ERRNO_AGAIN
+  };
+  wasi.wasiImport.sock_bind = (fd, addr, addr_len) => {
+      return 6; // ERRNO_AGAIN
+  };
+  wasi.wasiImport.sock_listen = (fd, backlog) => {
+      return 0; // success
+  };
+  wasi.wasiImport.sock_setsockopt = (fd, level, optname, optval, optlen) => {
+      return 0; // success
+  };
+  wasi.wasiImport.sock_getsockopt = (fd, level, optname, optval_ptr, optlen_ptr) => {
+      return 0; // success
+  };
+
+  console.log('Worker: instantiating WASM...');
   WebAssembly.instantiate(wasmBuffer, {
-    wasi_snapshot_preview1: wasi.wasiImport,
+      "wasi_snapshot_preview1": wasi.wasiImport,
   }).then((inst) => {
-    wasi.start(inst.instance);
+      console.log('Worker: WASM instantiated, starting...');
+      wasi.start(inst.instance);
+  }).catch((err) => {
+      console.error('Worker: WASM error:', err);
   });
+};
 }

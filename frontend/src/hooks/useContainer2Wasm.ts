@@ -102,8 +102,8 @@ async function loadC2WImage(
     onOutput(decoder.decode(data));
   });
 
-  // Create worker
-  const worker = new Worker("/c2w-src/worker-custom.js");
+  // Create worker (with cache-busting param)
+  const worker = new Worker("/c2w-src/worker-custom.js?v=" + Date.now());
 
   // Create TtyServer to connect PTY slave to worker
   const ttyServer = new TtyServer(slave);
