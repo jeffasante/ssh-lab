@@ -86,17 +86,29 @@ export default function App() {
 
   const isLab = appMode === "lab";
   const labConfig = isLab ? (config as LabConfig) : null;
+  const isC2W = appMode === "c2w";
+  const isSSH = appMode === "ssh";
+  const useWasm = mode === "wasm" && !isC2W;
+  const c2wKey = Object.keys(C2W_IMAGES)[0];
 
-  let hookResult: ReturnType<typeof useSSH>;
-  if (appMode === "c2w") {
-    const imageKey = Object.keys(C2W_IMAGES)[0];
-    hookResult = useContainer2Wasm(labConfig, imageKey);
-  } else if (appMode === "ssh") {
-    hookResult = useSSH(null, config as SSHConfig);
-  } else {
-    const sshHooks = mode === "wasm" ? useWasmSSH : useSSH;
-    hookResult = sshHooks(labConfig);
-  }
+  // Call ALL hooks unconditionally with null-safe params
+  const labResult = useSSH(
+    isSSH ? null : labConfig,
+    isSSH ? (config as SSHConfig) : undefined,
+  );
+  const wasmResult = useWasmSSH(labConfig);
+  const c2wResult = useContainer2Wasm(
+    isC2W ? labConfig : null,
+    isC2W ? c2wKey : undefined,
+  );
+
+  const hookResult = isC2W
+    ? c2wResult
+    : isSSH
+      ? labResult
+      : useWasm
+        ? wasmResult
+        : labResult;
   const {
     lines,
     services,
