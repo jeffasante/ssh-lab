@@ -48,7 +48,6 @@ async function loadC2WImage(
   imageUrl: string,
   onOutput: (chunk: string) => void,
 ): Promise<C2WInstance> {
-  // Download WASM with progress on main thread
   onOutput("Loading " + imageUrl + "...\n");
   const resp = await fetch(imageUrl);
   if (!resp.ok) throw new Error("Failed to fetch: " + resp.status);
@@ -75,7 +74,6 @@ async function loadC2WImage(
   }
   onOutput("[" + "#".repeat(20) + "] 100% " + formatBytes(total) + "\n");
 
-  // Concatenate chunks into single buffer
   const totalLen = chunks.reduce((a, c) => a + c.length, 0);
   const wasmBuf = new Uint8Array(totalLen);
   let offset = 0;
@@ -89,7 +87,7 @@ async function loadC2WImage(
   // Create PTY
   const { master, slave } = openpty();
 
-  // Configure termios like the demo
+  // Configure termios
   const termios = slave.ioctl("TCGETS");
   termios.iflag &= ~(ISTRIP | INLCR | IGNCR | ICRNL | IXON);
   termios.oflag &= ~OPOST;
@@ -102,33 +100,27 @@ async function loadC2WImage(
     onOutput(decoder.decode(data));
   });
 
-  // Create worker (with cache-busting param)
+  // Create worker
   const worker = new Worker("/c2w-src/worker-custom.js?v=" + Date.now());
 
-  // Create TtyServer to connect PTY slave to worker
+  // Create TtyServer
   const ttyServer = new TtyServer(slave);
   ttyServer.start(worker);
 
-  // Transfer the WASM buffer to the worker
-  // Create a new ArrayBuffer that can be transferred (Uint8Array.buffer might be non-transferable)
+  // Transfer WASM buffer
   const transferBuf = new Uint8Array(wasmBuf).buffer;
   worker.postMessage({ type: "wasm", buffer: transferBuf }, [transferBuf]);
 
   return {
     stdin: (data: string) => {
-      // Send user input through the PTY line discipline (lower/terminal side)
+      // Write user input directly to the PTY's line discipline
       const encoder = new TextEncoder();
       const bytes = encoder.encode(data);
-      console.log(
-        "C2W stdin: sending",
-        bytes.length,
-        "bytes:",
-        JSON.stringify(data),
-      );
-      console.log("C2W stdin: slave.ldisc exists:", !!(slave as any).ldisc);
-      console.log("C2W stdin: slave readable:", (slave as any).readable);
       (slave as any).ldisc.writeFromLower(bytes);
-      console.log("C2W stdin: slave readable after:", (slave as any).readable);
+      // Force flush in case non-canonical mode was changed
+      if (!(slave as any).ldisc.T.ICANON_P) {
+        (slave as any).ldisc.flushToUpper();
+      }
     },
     destroy: () => {
       worker.terminate();
