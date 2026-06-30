@@ -49,8 +49,7 @@ export function sessionTitle(
     return `${lab.username}@${lab.hostname}`;
   }
   // c2w
-  const lab2 = config as LabConfig;
-  return `${lab2.username}@container`;
+  return `root@debian`;
 }
 
 export function defaultSessionConfig(): LabConfig {

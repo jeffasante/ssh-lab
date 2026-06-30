@@ -131,8 +131,8 @@ export default function Onboarding({
     if (mode === "c2w") {
       onComplete(
         {
-          username: username.trim() || "user",
-          hostname: hostname.trim() || "debian",
+          username: "root",
+          hostname: "debian",
           role,
           os,
           scenario: scenario as LabConfig["scenario"],
@@ -383,26 +383,6 @@ export default function Onboarding({
             SSH
           </span>
         </div>
-
-        {/* Debian username */}
-        {mode === "c2w" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <div style={labelSx}>your username</div>
-            <input
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="user"
-              style={inputSx}
-              autoFocus
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleStart();
-              }}
-            />
-            <div style={{ fontSize: 10, color: "#484f58", marginTop: -4 }}>
-              this will be your user in the Debian container
-            </div>
-          </div>
-        )}
 
         {/* SSH connection form */}
         {mode === "ssh" && (
@@ -754,10 +734,18 @@ export default function Onboarding({
                     username: sshUser.trim(),
                     password: sshPassword,
                   } as SSHConfig);
+                } else if (mode === "c2w") {
+                  saveProfile(name, mode, {
+                    username: "root",
+                    hostname: "debian",
+                    role,
+                    os,
+                    scenario,
+                  } as LabConfig);
                 } else {
                   saveProfile(name, mode, {
                     username: username.trim() || "user",
-                    hostname: hostname.trim() || "debian",
+                    hostname: hostname.trim() || randomHostname(),
                     role,
                     os,
                     scenario,

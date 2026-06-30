@@ -12,6 +12,9 @@ type Props = {
   nanoFile?: NanoFile | null;
   setNanoFile?: (file: NanoFile | null) => void;
   theme: Theme;
+  /** When true, show a local prompt line at the bottom. Set to false for
+   *  container/PTY sessions that produce their own shell prompt. */
+  showPrompt?: boolean;
 };
 
 function classColors(theme: Theme): Record<string, string> {
@@ -36,6 +39,7 @@ export default function Terminal({
   nanoFile,
   setNanoFile,
   theme,
+  showPrompt = true,
 }: Props) {
   const outRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -762,8 +766,8 @@ export default function Terminal({
           );
         })}
 
-        {/* Live prompt */}
-        {!exited && (
+        {/* Live prompt — hidden for container/PTY sessions that produce their own shell prompt */}
+        {!exited && showPrompt && (
           <div style={{ display: "flex", alignItems: "center", marginTop: 2 }}>
             <span
               style={{
@@ -792,7 +796,7 @@ export default function Terminal({
       </div>
 
       {/* Hidden real input — pointerEvents must stay 'none' visually but we programmatic-focus on click */}
-      {!exited && (
+      {!exited && showPrompt && (
         <input
           ref={inputRef}
           value={input}
