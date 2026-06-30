@@ -50,7 +50,7 @@ export default function SessionTerminal({
   const wasmResult = useWasmSSH(isLabInBrowserWasm ? labConfig : null);
   const c2wResult = useContainer2Wasm(
     isC2W ? c2wConfig : null,
-    "/c2w/debian.wasm",
+    "c2w/debian.wasm",
   );
 
   /**
