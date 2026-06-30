@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { LabConfig, OS_PRESETS, SCENARIOS } from "../types";
+import { LabConfig, SSHConfig, AppMode, OS_PRESETS, SCENARIOS } from "../types";
 
 function randomHostname(): string {
   const suffix = Math.random().toString(36).substring(2, 6);
@@ -7,7 +7,7 @@ function randomHostname(): string {
 }
 
 type Props = {
-  onComplete: (config: LabConfig) => void;
+  onComplete: (config: LabConfig | SSHConfig, mode: AppMode) => void;
 };
 
 const roles = [
@@ -23,6 +23,7 @@ const roles = [
 const oses = Object.values(OS_PRESETS);
 
 export default function Onboarding({ onComplete }: Props) {
+  const [mode, setMode] = useState<AppMode>("lab");
   const [step, setStep] = useState(1);
   const [username, setUsername] = useState("");
   const [role, setRole] = useState("sre");
@@ -44,14 +45,34 @@ export default function Onboarding({ onComplete }: Props) {
     setStep((s) => Math.max(s - 1, 1));
   };
 
+  const [sshHost, setSshHost] = useState("");
+  const [sshPort, setSshPort] = useState("22");
+  const [sshUser, setSshUser] = useState("");
+  const [sshPassword, setSshPassword] = useState("");
+
   const handleStart = () => {
-    onComplete({
-      username: username.trim(),
-      hostname: hostname.trim() || randomHostname(),
-      role,
-      os,
-      scenario: scenario as LabConfig["scenario"],
-    });
+    if (mode === "ssh") {
+      onComplete(
+        {
+          host: sshHost.trim(),
+          port: parseInt(sshPort) || 22,
+          username: sshUser.trim(),
+          password: sshPassword,
+        },
+        "ssh",
+      );
+    } else {
+      onComplete(
+        {
+          username: username.trim(),
+          hostname: hostname.trim() || randomHostname(),
+          role,
+          os,
+          scenario: scenario as LabConfig["scenario"],
+        },
+        "lab",
+      );
+    }
   };
 
   const activeColor = "#ccc";
@@ -144,49 +165,130 @@ export default function Onboarding({ onComplete }: Props) {
           padding: "28px 32px 24px",
         }}
       >
-        {/* Step indicator */}
+        {/* Mode toggle */}
         <div
           style={{
             display: "flex",
-            alignItems: "center",
             justifyContent: "center",
-            marginBottom: 28,
             gap: 0,
-            fontSize: 11,
-            fontFamily: "'SF Mono','Fira Code',monospace",
+            marginBottom: 24,
           }}
         >
-          {[1, 2, 3].map((n, i) => (
-            <React.Fragment key={n}>
-              <span
-                style={{
-                  color: stepColor(n),
-                  fontWeight: step >= n ? 500 : 400,
-                }}
-              >
-                {n}
-              </span>
-              {i < 2 && (
-                <span
-                  style={{
-                    width: 48,
-                    height: 1,
-                    background:
-                      n < step
-                        ? doneColor
-                        : n === step
-                          ? activeColor
-                          : "#30363d",
-                    margin: "0 8px",
-                  }}
-                />
-              )}
-            </React.Fragment>
-          ))}
+          <span
+            onClick={() => setMode("lab")}
+            style={{
+              fontSize: 11,
+              fontFamily: "'SF Mono','Fira Code',monospace",
+              cursor: "pointer",
+              padding: "5px 14px",
+              border: `1px solid ${mode === "lab" ? activeColor : "#30363d"}`,
+              borderRadius: "4px 0 0 4px",
+              color: mode === "lab" ? activeColor : "#6e7681",
+              background: mode === "lab" ? "#0d1117" : "transparent",
+            }}
+          >
+            Lab Mode
+          </span>
+          <span
+            onClick={() => setMode("ssh")}
+            style={{
+              fontSize: 11,
+              fontFamily: "'SF Mono','Fira Code',monospace",
+              cursor: "pointer",
+              padding: "5px 14px",
+              border: `1px solid ${mode === "ssh" ? activeColor : "#30363d"}`,
+              borderRadius: "0 4px 4px 0",
+              color: mode === "ssh" ? activeColor : "#6e7681",
+              background: mode === "ssh" ? "#0d1117" : "transparent",
+            }}
+          >
+            SSH Mode
+          </span>
         </div>
 
-        {/* Step 1 — Who are you? */}
-        {step === 1 && (
+        {/* SSH connection form */}
+        {mode === "ssh" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <div style={labelSx}>connect to real server</div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input
+                value={sshHost}
+                onChange={(e) => setSshHost(e.target.value)}
+                placeholder="192.168.1.100"
+                style={{ ...inputSx, flex: 1 }}
+                autoFocus
+              />
+              <input
+                value={sshPort}
+                onChange={(e) => setSshPort(e.target.value)}
+                placeholder="22"
+                style={{ ...inputSx, width: 70 }}
+              />
+            </div>
+            <input
+              value={sshUser}
+              onChange={(e) => setSshUser(e.target.value)}
+              placeholder="root"
+              style={inputSx}
+            />
+            <input
+              value={sshPassword}
+              onChange={(e) => setSshPassword(e.target.value)}
+              placeholder="password"
+              type="password"
+              style={inputSx}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && sshHost && sshUser) handleStart();
+              }}
+            />
+          </div>
+        )}
+
+        {/* Step indicator — lab mode only */}
+        {mode === "lab" && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              marginBottom: 28,
+              gap: 0,
+              fontSize: 11,
+              fontFamily: "'SF Mono','Fira Code',monospace",
+            }}
+          >
+            {[1, 2, 3].map((n, i) => (
+              <React.Fragment key={n}>
+                <span
+                  style={{
+                    color: stepColor(n),
+                    fontWeight: step >= n ? 500 : 400,
+                  }}
+                >
+                  {n}
+                </span>
+                {i < 2 && (
+                  <span
+                    style={{
+                      width: 48,
+                      height: 1,
+                      background:
+                        n < step
+                          ? doneColor
+                          : n === step
+                            ? activeColor
+                            : "#30363d",
+                      margin: "0 8px",
+                    }}
+                  />
+                )}
+              </React.Fragment>
+            ))}
+          </div>
+        )}
+
+        {/* Step 1 — Who are you? (lab only) */}
+        {mode === "lab" && step === 1 && (
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             <div>
               <div style={labelSx}>username</div>
@@ -222,8 +324,8 @@ export default function Onboarding({ onComplete }: Props) {
           </div>
         )}
 
-        {/* Step 2 — Name your server */}
-        {step === 2 && (
+        {/* Step 2 — Name your server (lab only) */}
+        {mode === "lab" && step === 2 && (
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             <div>
               <div style={labelSx}>hostname</div>
@@ -262,8 +364,8 @@ export default function Onboarding({ onComplete }: Props) {
           </div>
         )}
 
-        {/* Step 3 — Pick a scenario */}
-        {step === 3 && (
+        {/* Step 3 — Pick a scenario (lab only) */}
+        {mode === "lab" && step === 3 && (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <div style={labelSx}>scenario</div>
             <div style={radioGroupSx}>
@@ -306,59 +408,85 @@ export default function Onboarding({ onComplete }: Props) {
             gap: 8,
           }}
         >
-          <div>
-            {step > 1 && (
+          {mode === "lab" && (
+            <>
+              <div>
+                {step > 1 && (
+                  <button
+                    onClick={handleBack}
+                    style={{
+                      background: "transparent",
+                      border: "1px solid #30363d",
+                      borderRadius: 4,
+                      color: "#6e7681",
+                      fontFamily: "'SF Mono','Fira Code',monospace",
+                      fontSize: 12,
+                      padding: "7px 16px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    ← Back
+                  </button>
+                )}
+              </div>
+
+              {step < 3 ? (
+                <button
+                  onClick={handleNext}
+                  disabled={!canNext()}
+                  style={{
+                    background: "transparent",
+                    border: `1px solid ${canNext() ? "#aaa" : "#30363d"}`,
+                    borderRadius: 4,
+                    color: canNext() ? "#ccc" : "#555",
+                    fontFamily: "'SF Mono','Fira Code',monospace",
+                    fontSize: 12,
+                    padding: "7px 16px",
+                    cursor: canNext() ? "pointer" : "default",
+                  }}
+                >
+                  Next →
+                </button>
+              ) : (
+                <button
+                  onClick={handleStart}
+                  style={{
+                    background: "transparent",
+                    border: "1px solid #aaa",
+                    borderRadius: 4,
+                    color: "#ccc",
+                    fontFamily: "'SF Mono','Fira Code',monospace",
+                    fontSize: 12,
+                    padding: "7px 16px",
+                    cursor: "pointer",
+                  }}
+                >
+                  start session →
+                </button>
+              )}
+            </>
+          )}
+
+          {mode === "ssh" && (
+            <div style={{ width: "100%" }}>
               <button
-                onClick={handleBack}
+                onClick={handleStart}
+                disabled={!sshHost || !sshUser}
                 style={{
+                  width: "100%",
                   background: "transparent",
-                  border: "1px solid #30363d",
+                  border: `1px solid ${sshHost && sshUser ? "#aaa" : "#30363d"}`,
                   borderRadius: 4,
-                  color: "#6e7681",
+                  color: sshHost && sshUser ? "#ccc" : "#555",
                   fontFamily: "'SF Mono','Fira Code',monospace",
                   fontSize: 12,
                   padding: "7px 16px",
-                  cursor: "pointer",
+                  cursor: sshHost && sshUser ? "pointer" : "default",
                 }}
               >
-                ← Back
+                connect →
               </button>
-            )}
-          </div>
-
-          {step < 3 ? (
-            <button
-              onClick={handleNext}
-              disabled={!canNext()}
-              style={{
-                background: "transparent",
-                border: `1px solid ${canNext() ? "#aaa" : "#30363d"}`,
-                borderRadius: 4,
-                color: canNext() ? "#ccc" : "#555",
-                fontFamily: "'SF Mono','Fira Code',monospace",
-                fontSize: 12,
-                padding: "7px 16px",
-                cursor: canNext() ? "pointer" : "default",
-              }}
-            >
-              Next →
-            </button>
-          ) : (
-            <button
-              onClick={handleStart}
-              style={{
-                background: "transparent",
-                border: "1px solid #aaa",
-                borderRadius: 4,
-                color: "#ccc",
-                fontFamily: "'SF Mono','Fira Code',monospace",
-                fontSize: 12,
-                padding: "7px 16px",
-                cursor: "pointer",
-              }}
-            >
-              start session →
-            </button>
+            </div>
           )}
         </div>
       </div>

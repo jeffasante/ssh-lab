@@ -1,4 +1,4 @@
-FROM golang:1.21-alpine AS build
+FROM golang:alpine AS build
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
@@ -9,5 +9,5 @@ FROM alpine:3.19
 RUN apk add --no-cache docker-cli
 WORKDIR /app
 COPY --from=build /app/ssh-lab-server .
-EXPOSE 8080
+EXPOSE 8080 9099
 CMD ["./ssh-lab-server"]

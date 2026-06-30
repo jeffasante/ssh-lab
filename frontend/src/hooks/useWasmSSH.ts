@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { LabConfig, OS_PRESETS } from "../types";
+import { LabConfig, SSHConfig, OS_PRESETS } from "../types";
 import type { ServiceInfo, OutputLine } from "./useSSH";
 
 type CommandResponse = {
@@ -42,7 +42,10 @@ async function loadWasm(): Promise<void> {
   go.run(result.instance);
 }
 
-export function useWasmSSH(config: LabConfig | null): UseSSHReturn {
+export function useWasmSSH(
+  config: LabConfig | null,
+  _sshConfig?: SSHConfig,
+): UseSSHReturn {
   const ws = useRef<WebSocket | null>(null);
   const [connected, setConnected] = useState(false);
   const [lines, setLines] = useState<OutputLine[]>([]);

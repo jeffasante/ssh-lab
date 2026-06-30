@@ -415,21 +415,19 @@ export default function Terminal({
         {/* Nano header */}
         <div
           style={{
-            background: "#1a1a1a",
-            borderBottom: "1px solid #333",
-            padding: "8px 14px",
+            background: "#ccc",
+            color: "#111",
+            padding: "4px 12px",
             display: "flex",
             justifyContent: "space-between",
             fontSize: 12,
-            color: "#aaa",
+            fontFamily: "monospace",
+            fontWeight: "bold",
           }}
         >
-          <span>GNU nano 6.2</span>
-          <span>
-            {nanoTempFilename}
-            {nanoModified ? " *" : ""}
-          </span>
-          <span></span>
+          <span> UW PICO 5.09</span>
+          <span>File: {nanoTempFilename}</span>
+          <span style={{ minWidth: 60, textAlign: "right" }}>{nanoModified ? "Modified" : ""}</span>
         </div>
 
         {/* Text area for editing */}
@@ -451,6 +449,19 @@ export default function Terminal({
             outline: "none",
           }}
           onKeyDown={(e) => {
+            if (nanoPrompt !== "none") {
+              e.preventDefault();
+              if (nanoPrompt === "exit-confirm") {
+                if (e.key.toLowerCase() === "y") {
+                  handlePromptResponse("y");
+                } else if (e.key.toLowerCase() === "n") {
+                  handlePromptResponse("n");
+                } else if (e.key === "Escape" || (e.ctrlKey && e.key === "c")) {
+                  handlePromptResponse("cancel");
+                }
+              }
+              return;
+            }
             if (e.ctrlKey && e.key === "x") {
               e.preventDefault();
               handleNanoExit();
@@ -464,7 +475,7 @@ export default function Terminal({
         {/* Nano footer */}
         <div
           style={{
-            background: "#1a1a1a",
+            background: "#111",
             borderTop: "1px solid #333",
             padding: "10px 14px",
             fontSize: 12,
@@ -474,9 +485,9 @@ export default function Terminal({
           }}
         >
           {/* Status or Prompt line */}
-          <div style={{ color: "#d4d4d4", minHeight: 18, fontWeight: 500 }}>
+          <div style={{ color: "#d4d4d4", minHeight: 18, fontFamily: "monospace" }}>
             {nanoPrompt === "exit-confirm" && (
-              <span style={{ color: "#ff6b6b" }}>
+              <span>
                 Save modified buffer? (Answering "No" will discard changes.)
                 [Y/N/Cancel]:{" "}
                 <button
@@ -490,7 +501,7 @@ export default function Terminal({
                     padding: "1px 6px",
                   }}
                 >
-                  Yes
+                  Yes (Y)
                 </button>
                 <button
                   onClick={() => handlePromptResponse("n")}
@@ -503,7 +514,7 @@ export default function Terminal({
                     padding: "1px 6px",
                   }}
                 >
-                  No
+                  No (N)
                 </button>
                 <button
                   onClick={() => handlePromptResponse("cancel")}
@@ -525,6 +536,7 @@ export default function Terminal({
                 <input
                   value={nanoTempFilename}
                   onChange={(e) => setNanoTempFilename(e.target.value)}
+                  autoFocus
                   style={{
                     background: "#222",
                     border: "1px solid #444",
@@ -536,7 +548,7 @@ export default function Terminal({
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       handlePromptResponse("confirm");
-                    } else if (e.key === "Escape") {
+                    } else if (e.key === "Escape" || (e.ctrlKey && e.key === "c")) {
                       handlePromptResponse("cancel");
                     }
                   }}
@@ -579,41 +591,60 @@ export default function Terminal({
             style={{
               display: "grid",
               gridTemplateColumns: "repeat(6, 1fr)",
+              gridTemplateRows: "repeat(2, auto)",
+              gridAutoFlow: "column",
               gap: "6px 12px",
               color: "#aaa",
               fontSize: 11.5,
+              fontFamily: "monospace",
             }}
           >
-            <div onClick={handleNanoExit} style={{ cursor: "pointer" }}>
-              <span
-                style={{
-                  background: "#ccc",
-                  color: "#111",
-                  padding: "0px 3px",
-                  marginRight: 4,
-                  fontWeight: "bold",
-                }}
-              >
-                ^X
-              </span>{" "}
-              Exit
+            {/* Column 1 */}
+            <div>
+              <span style={{ background: "#ccc", color: "#111", padding: "0px 3px", marginRight: 4, fontWeight: "bold" }}>^G</span> Get Help
             </div>
-            <div
-              onClick={() => setNanoPrompt("save-name")}
-              style={{ cursor: "pointer" }}
-            >
-              <span
-                style={{
-                  background: "#ccc",
-                  color: "#111",
-                  padding: "0px 3px",
-                  marginRight: 4,
-                  fontWeight: "bold",
-                }}
-              >
-                ^O
-              </span>{" "}
-              WriteOut
+            <div onClick={handleNanoExit} style={{ cursor: "pointer" }}>
+              <span style={{ background: "#ccc", color: "#111", padding: "0px 3px", marginRight: 4, fontWeight: "bold" }}>^X</span> Exit
+            </div>
+
+            {/* Column 2 */}
+            <div onClick={() => setNanoPrompt("save-name")} style={{ cursor: "pointer" }}>
+              <span style={{ background: "#ccc", color: "#111", padding: "0px 3px", marginRight: 4, fontWeight: "bold" }}>^O</span> WriteOut
+            </div>
+            <div>
+              <span style={{ background: "#ccc", color: "#111", padding: "0px 3px", marginRight: 4, fontWeight: "bold" }}>^J</span> Justify
+            </div>
+
+            {/* Column 3 */}
+            <div>
+              <span style={{ background: "#ccc", color: "#111", padding: "0px 3px", marginRight: 4, fontWeight: "bold" }}>^R</span> Read File
+            </div>
+            <div>
+              <span style={{ background: "#ccc", color: "#111", padding: "0px 3px", marginRight: 4, fontWeight: "bold" }}>^W</span> Where is
+            </div>
+
+            {/* Column 4 */}
+            <div>
+              <span style={{ background: "#ccc", color: "#111", padding: "0px 3px", marginRight: 4, fontWeight: "bold" }}>^Y</span> Prev Pg
+            </div>
+            <div>
+              <span style={{ background: "#ccc", color: "#111", padding: "0px 3px", marginRight: 4, fontWeight: "bold" }}>^V</span> Next Pg
+            </div>
+
+            {/* Column 5 */}
+            <div>
+              <span style={{ background: "#ccc", color: "#111", padding: "0px 3px", marginRight: 4, fontWeight: "bold" }}>^K</span> Cut Text
+            </div>
+            <div>
+              <span style={{ background: "#ccc", color: "#111", padding: "0px 3px", marginRight: 4, fontWeight: "bold" }}>^U</span> UnCut Text
+            </div>
+
+            {/* Column 6 */}
+            <div>
+              <span style={{ background: "#ccc", color: "#111", padding: "0px 3px", marginRight: 4, fontWeight: "bold" }}>^C</span> Cur Pos
+            </div>
+            <div>
+              <span style={{ background: "#ccc", color: "#111", padding: "0px 3px", marginRight: 4, fontWeight: "bold" }}>^T</span> To Spell
             </div>
           </div>
         </div>

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { LabConfig, OS_PRESETS } from "../types";
+import { LabConfig, SSHConfig, OS_PRESETS } from "../types";
 
 export type ServiceInfo = {
   name: string;
@@ -17,7 +17,7 @@ export type OutputLine = {
 };
 
 type WSMessage = {
-  type: "init" | "output" | "services";
+  type: string;
   payload: unknown;
 };
 
@@ -44,13 +44,17 @@ type UseSSHReturn = {
 const WS_URL = `ws://${window.location.host}/ws`;
 const API_INIT = `${window.location.protocol}//${window.location.host}/api/init`;
 
-export function useSSH(config: LabConfig | null): UseSSHReturn {
+export function useSSH(
+  config: LabConfig | null,
+  sshConfig?: SSHConfig,
+): UseSSHReturn {
   const ws = useRef<WebSocket | null>(null);
   const [connected, setConnected] = useState(false);
   const [lines, setLines] = useState<OutputLine[]>([]);
   const [services, setServices] = useState<Record<string, ServiceInfo>>({});
   const [nanoFile, setNanoFile] = useState<NanoFile | null>(null);
   const inited = useRef(false);
+  const isSSH = !!sshConfig;
 
   const appendLines = useCallback((newLines: OutputLine[]) => {
     setLines((prev) => [...prev, ...newLines]);
@@ -59,11 +63,62 @@ export function useSSH(config: LabConfig | null): UseSSHReturn {
   const clearLines = useCallback(() => setLines([]), []);
 
   useEffect(() => {
-    if (!config || inited.current) return;
+    if (inited.current) return;
     inited.current = true;
 
+    if (isSSH) {
+      // SSH mode — connect to WebSocket and send SSH config
+      const sock = new WebSocket(WS_URL);
+      ws.current = sock;
+
+      sock.onopen = () => {
+        // Send SSH config as first message
+        sock.send(
+          JSON.stringify({
+            mode: "ssh",
+            ssh: sshConfig,
+          }),
+        );
+      };
+
+      sock.onmessage = (e) => {
+        const msg: WSMessage = JSON.parse(e.data);
+        if (msg.type === "ssh_ready") {
+          setConnected(true);
+        } else if (msg.type === "ssh_output") {
+          const text = msg.payload as string;
+          // Split SSH output into lines
+          const rawLines = text.split(/\r?\n/);
+          for (let i = 0; i < rawLines.length; i++) {
+            const line = rawLines[i];
+            if (i < rawLines.length - 1) {
+              appendLines([{ text: line || " ", class: "" }]);
+            } else if (line) {
+              appendLines([{ text: line, class: "" }]);
+            }
+          }
+        } else if (msg.type === "init") {
+          setServices(msg.payload as Record<string, ServiceInfo>);
+        } else if (msg.type === "services") {
+          setServices(msg.payload as Record<string, ServiceInfo>);
+        } else if (msg.type === "output") {
+          const resp = msg.payload as CommandResponse;
+          if (resp.lines) appendLines(resp.lines);
+          if (resp.services) setServices(resp.services);
+        }
+      };
+
+      sock.onclose = () => setConnected(false);
+
+      return () => {
+        sock.close();
+      };
+    }
+
+    // Lab mode — existing logic
     const doInit = async () => {
-      // POST /api/init to apply scenario + OS
+      if (!config) return;
+
       try {
         await fetch(API_INIT, {
           method: "POST",
@@ -75,24 +130,21 @@ export function useSSH(config: LabConfig | null): UseSSHReturn {
           }),
         });
       } catch {
-        // continue anyway — server might not need init
+        // continue
       }
 
-      // Build boot banner
       const osInfo = OS_PRESETS[config.os] ?? OS_PRESETS.ubuntu;
-      const boot: OutputLine[] = [
+      appendLines([
         { text: `${osInfo.pretty} — ${config.hostname}`, class: "head" },
         { text: `Kernel ${osInfo.kernel} x86_64`, class: "muted" },
         { text: "", class: "" },
         {
-          text: `Last login: Sun Jun 29 08:14:22 2026 from 10.0.0.5`,
+          text: "Last login: Sun Jun 29 08:14:22 2026 from 10.0.0.5",
           class: "muted",
         },
         { text: "", class: "" },
-      ];
-      appendLines(boot);
+      ]);
 
-      // Open WebSocket
       const sock = new WebSocket(WS_URL);
       ws.current = sock;
 
@@ -107,9 +159,6 @@ export function useSSH(config: LabConfig | null): UseSSHReturn {
           setServices(msg.payload as Record<string, ServiceInfo>);
         } else if (msg.type === "output") {
           const resp = msg.payload as CommandResponse;
-          if (resp.nano) {
-            setNanoFile(resp.nano);
-          }
           if (resp.lines) appendLines(resp.lines);
           if (resp.services) setServices(resp.services);
         }
@@ -119,20 +168,35 @@ export function useSSH(config: LabConfig | null): UseSSHReturn {
     doInit();
 
     return () => {
-      inited.current = false;
       ws.current?.close();
     };
-  }, [config, appendLines]);
+  }, [config, sshConfig, isSSH, appendLines]);
 
-  const sendCommand = useCallback((cmd: string) => {
-    if (ws.current?.readyState === WebSocket.OPEN) {
-      if (!cmd.startsWith("__")) {
-        const promptText = `${config?.username || "jeff"}@${config?.hostname || "server-a1b2"}:~$ ${cmd}`;
-        appendLines([{ text: promptText, class: "prompt" }]);
+  const sendCommand = useCallback(
+    (cmd: string) => {
+      if (isSSH) {
+        // SSH mode: send keystroke followed by newline
+        if (ws.current?.readyState === WebSocket.OPEN) {
+          ws.current.send(
+            JSON.stringify({ type: "ssh_keystroke", payload: cmd + "\n" }),
+          );
+        }
+        return;
       }
-      ws.current.send(JSON.stringify({ command: cmd }));
-    }
-  }, [config, appendLines]);
+      if (ws.current?.readyState === WebSocket.OPEN) {
+        ws.current.send(JSON.stringify({ command: cmd }));
+      }
+    },
+    [isSSH],
+  );
 
-  return { lines, services, connected, sendCommand, clearLines, nanoFile, setNanoFile };
+  return {
+    lines,
+    services,
+    connected,
+    sendCommand,
+    clearLines,
+    nanoFile,
+    setNanoFile,
+  };
 }

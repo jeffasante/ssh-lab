@@ -4,12 +4,14 @@ import { useWasmSSH } from "./hooks/useWasmSSH";
 import Terminal from "./components/Terminal";
 import Sidebar from "./components/Sidebar";
 import Onboarding from "./components/Onboarding";
-import { LabConfig } from "./types";
+import { LabConfig, SSHConfig, AppMode } from "./types";
 import { getTheme, ThemeId } from "./themes";
 
 const CONFIG_VERSION = 2;
 
-function loadConfig(): LabConfig | null {
+type AppConfig = LabConfig | SSHConfig;
+
+function loadConfig(): AppConfig | null {
   try {
     const raw = localStorage.getItem("ssh-lab-config");
     if (!raw) return null;
@@ -21,11 +23,20 @@ function loadConfig(): LabConfig | null {
   return null;
 }
 
-function saveConfig(config: LabConfig) {
+function loadMode(): AppMode {
+  try {
+    const m = localStorage.getItem("ssh-lab-app-mode") as AppMode | null;
+    if (m === "ssh") return "ssh";
+  } catch {}
+  return "lab";
+}
+
+function saveConfig(config: AppConfig, mode: AppMode) {
   localStorage.setItem(
     "ssh-lab-config",
     JSON.stringify({ ...config, _version: CONFIG_VERSION }),
   );
+  localStorage.setItem("ssh-lab-app-mode", mode);
 }
 
 function getRunMode(): "server" | "wasm" {
@@ -53,11 +64,15 @@ const themes: { id: ThemeId; label: string }[] = [
 ];
 
 export default function App() {
-  const [config, setConfig] = useState<LabConfig | null>(loadConfig);
+  const [config, setConfig] = useState<AppConfig | null>(loadConfig);
+  const [appMode, setAppMode] = useState<AppMode>(loadMode);
   const [themeId, setThemeId] = useState<ThemeId>(loadTheme);
   const mode = useMemo(getRunMode, []);
 
   const theme = useMemo(() => getTheme(themeId), [themeId]);
+
+  const isLab = appMode === "lab";
+  const labConfig = isLab ? (config as LabConfig) : null;
 
   const sshHooks = mode === "wasm" ? useWasmSSH : useSSH;
   const {
@@ -68,24 +83,18 @@ export default function App() {
     clearLines,
     nanoFile,
     setNanoFile,
-  } = sshHooks(config);
+  } = sshHooks(labConfig, isLab ? undefined : (config as SSHConfig));
 
   const handleCommand = (cmd: string) => {
     sendCommand(cmd);
   };
 
-  const switchTheme = () => {
-    const ids: ThemeId[] = ["monochrome", "terminal", "ocean"];
-    const next = ids[(ids.indexOf(themeId) + 1) % ids.length];
-    setThemeId(next);
-    localStorage.setItem("ssh-lab-theme", next);
-  };
-
   if (!config) {
     return (
       <Onboarding
-        onComplete={(c) => {
-          saveConfig(c);
+        onComplete={(c, m) => {
+          saveConfig(c, m);
+          setAppMode(m);
           setConfig(c);
         }}
       />
@@ -107,7 +116,6 @@ export default function App() {
     root.style.setProperty("--theme-cursor", theme.cursor);
     root.style.setProperty("--theme-scrollbar", theme.scrollbar);
 
-    // Inject global theme stylesheet
     const existing = document.getElementById("theme-styles");
     if (existing) existing.remove();
     const sheet = document.createElement("style");
@@ -120,6 +128,10 @@ export default function App() {
     `;
     document.head.appendChild(sheet);
   }, [theme]);
+
+  const hostname = isLab
+    ? (config as LabConfig).hostname
+    : (config as SSHConfig).host;
 
   return (
     <div
@@ -161,7 +173,7 @@ export default function App() {
               fontFamily: "monospace",
             }}
           >
-            {config.hostname} · 10.0.0.42 · SSH Lab
+            {hostname} · {isLab ? "Lab" : "SSH"}
           </span>
           <span
             style={{
@@ -173,11 +185,12 @@ export default function App() {
               padding: "1px 5px",
             }}
           >
-            {mode}
+            {appMode}
           </span>
           <span
             onClick={() => {
               localStorage.removeItem("ssh-lab-config");
+              localStorage.removeItem("ssh-lab-app-mode");
               setConfig(null);
             }}
             style={{
@@ -191,20 +204,8 @@ export default function App() {
           >
             reconfigure
           </span>
-          <span
-            onClick={() => sendCommand("tutorial")}
-            style={{
-              fontSize: 10,
-              color: theme.accent,
-              fontFamily: "monospace",
-              cursor: "pointer",
-            }}
-          >
-            [tutorial]
-          </span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {/* Theme switcher */}
           {themes.map((t) => (
             <span
               key={t.id}
@@ -253,13 +254,15 @@ export default function App() {
           onCommand={handleCommand}
           onClear={clearLines}
           connected={connected}
-          username={config.username}
-          hostname={config.hostname}
+          username={isLab ? (config as LabConfig).username : ""}
+          hostname={hostname}
           nanoFile={nanoFile}
           setNanoFile={setNanoFile}
           theme={theme}
         />
-        <Sidebar services={services} connected={connected} theme={theme} />
+        {isLab && (
+          <Sidebar services={services} connected={connected} theme={theme} />
+        )}
       </div>
     </div>
   );

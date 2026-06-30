@@ -75,6 +75,29 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 
+	// Read first message to determine mode
+	_, firstMsg, err := conn.ReadMessage()
+	if err != nil {
+		return
+	}
+	var initReq struct {
+		Mode string    `json:"mode"`
+		SSH  SSHConfig `json:"ssh,omitempty"`
+	}
+	if err := json.Unmarshal(firstMsg, &initReq); err != nil {
+		return
+	}
+
+	// SSH mode — connect to real server
+	if initReq.Mode == "ssh" {
+		sendJSON(conn, WSMessage{Type: "ssh_ready", Payload: "connecting..."})
+		if err := startSSHSession(conn, initReq.SSH); err != nil {
+			log.Println("ssh error:", err)
+			sendJSON(conn, WSMessage{Type: "ssh_output", Payload: fmt.Sprintf("\r\nSSH connection failed: %s\r\n", err)})
+		}
+		return
+	}
+
 	// Send initial state
 	sendJSON(conn, WSMessage{
 		Type:    "init",
@@ -215,6 +238,66 @@ func main() {
 
 		w.Write([]byte(`{"ok":true}`))
 	})
+
+	// Real-service mock HTTP — lets localhost `curl` hit real simulated services
+	serviceMux := http.NewServeMux()
+	serviceMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		// Determine which service to mock based on path
+		path := strings.TrimPrefix(r.URL.Path, "/")
+		serviceName := strings.Split(path, "/")[0]
+		if serviceName == "" {
+			serviceName = "nginx"
+		}
+
+		state.mu.Lock()
+		svc := matchService(serviceName)
+		state.mu.Unlock()
+
+		if svc == nil || !svc.Running {
+			w.Header().Set("Content-Type", "text/plain")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			w.Write([]byte(fmt.Sprintf("Service %s is not running\n", serviceName)))
+			return
+		}
+
+		switch svc.Port {
+		case 80:
+			w.Header().Set("Content-Type", "text/html")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`<!DOCTYPE html><html><head><title>Server</title></head><body><h1>Nginx OK</h1></body></html>`))
+		case 3000:
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			if strings.Contains(path, "/health") {
+				w.Write([]byte(`{"status":"healthy","checks":{"database":"ok","redis":"ok","disk":"ok"},"uptime":10843}`))
+			} else {
+				w.Write([]byte(`{"status":"ok","uptime":10843,"services":{"db":"connected","cache":"connected"}}`))
+			}
+		case 9090:
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"status":"success","data":{"resultType":"scalar","result":[1751200000,"1"]}}`))
+		case 9100:
+			w.Header().Set("Content-Type", "text/plain")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(fmt.Sprintf(`# HELP node_cpu_seconds_total Seconds the CPUs spent in each mode
+# TYPE node_cpu_seconds_total counter
+node_cpu_seconds_total{cpu="0",mode="idle"} %.0f
+node_cpu_seconds_total{cpu="0",mode="system"} %.0f
+`, randFloat(50000, 200000), randFloat(5000, 50000))))
+		default:
+			w.Header().Set("Content-Type", "text/plain")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(fmt.Sprintf("Connected to %s on port %d\n", svc.Display, svc.Port)))
+		}
+	})
+
+	go func() {
+		log.Println("mock services listening on :9099")
+		if err := http.ListenAndServe(":9099", serviceMux); err != nil {
+			log.Println("mock services stopped:", err)
+		}
+	}()
 
 	// Wrap mux with CORS for dev
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

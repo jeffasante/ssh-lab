@@ -6,6 +6,15 @@ export type LabConfig = {
   scenario: ScenarioId;
 };
 
+export type SSHConfig = {
+  host: string;
+  port: number;
+  username: string;
+  password: string;
+};
+
+export type AppMode = "lab" | "ssh";
+
 export type ScenarioId =
   | "healthy"
   | "services-down"

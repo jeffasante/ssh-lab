@@ -1351,6 +1351,50 @@ func handleCommand(raw string) CommandResponse {
 			)
 		}
 
+		// Special handling for port 9099 (mock services gateway)
+		if port == 9099 && isLocal {
+			path := cleanURL
+			if idx := strings.Index(cleanURL, ":"); idx >= 0 {
+				path = cleanURL[idx+1:]
+			}
+			// Find first path segment after port
+			if slashIdx := strings.Index(path, "/"); slashIdx >= 0 {
+				path = path[slashIdx:]
+			} else {
+				path = "/nginx"
+			}
+			servicePath := strings.TrimPrefix(path, "/")
+			svcName := strings.Split(servicePath, "/")[0]
+			state.mu.Lock()
+			svc := matchService(svcName)
+			state.mu.Unlock()
+			if svc != nil && svc.Running {
+				switch svc.Port {
+				case 80:
+					lines = append(lines, line(`<!DOCTYPE html><html><head><title>Server</title></head><body><h1>Nginx OK</h1></body></html>`, "ok"))
+				case 3000:
+					if strings.Contains(servicePath, "/health") {
+						lines = append(lines, line(`{"status":"healthy","checks":{"database":"ok","redis":"ok","disk":"ok"},"uptime":10843}`, "ok"))
+					} else {
+						lines = append(lines, line(`{"status":"ok","uptime":10843,"services":{"db":"connected","cache":"connected"}}`, "ok"))
+					}
+				case 9090:
+					lines = append(lines, line(`{"status":"success","data":{"resultType":"scalar","result":[1751200000,"1"]}}`, "ok"))
+				case 9100:
+					lines = append(lines, line("# HELP node_cpu_seconds_total Seconds the CPUs spent in each mode", "muted"))
+					lines = append(lines, line("# TYPE node_cpu_seconds_total counter", "muted"))
+					lines = append(lines, line(fmt.Sprintf(`node_cpu_seconds_total{cpu="0",mode="idle"} %.0f`, randFloat(50000, 200000)), "ok"))
+					lines = append(lines, line(fmt.Sprintf(`node_cpu_seconds_total{cpu="0",mode="system"} %.0f`, randFloat(5000, 50000)), "ok"))
+				default:
+					lines = append(lines, line(fmt.Sprintf("Connected to %s on port %d", svc.Display, svc.Port), "ok"))
+				}
+			} else {
+				lines = append(lines, line(fmt.Sprintf("curl: (7) Failed to connect to localhost port 9099: Service '%s' is not running", svcName), "err"))
+			}
+			lines = append(lines, blank())
+			break
+		}
+
 		if found != nil && found.Running {
 			if headersOnly || verbose {
 				lines = append(lines,
