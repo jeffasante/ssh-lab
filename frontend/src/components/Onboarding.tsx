@@ -157,12 +157,12 @@ export default function Onboarding({ onComplete }: Props) {
     >
       <div
         style={{
-          width: "100%",
+          width: "92%",
           maxWidth: 480,
           background: "#161b22",
           border: "1px solid #21262d",
           borderRadius: 4,
-          padding: "28px 32px 24px",
+          padding: "24px 20px",
         }}
       >
         {/* Mode toggle */}

@@ -4,9 +4,10 @@ import { ServiceInfo } from "../hooks/useSSH";
 type Props = {
   services: Record<string, ServiceInfo>;
   connected: boolean;
+  style?: React.CSSProperties;
 };
 
-export default function Sidebar({ services, connected }: Props) {
+export default function Sidebar({ services, connected, style }: Props) {
   const entries = Object.values(services).sort((a, b) =>
     a.name.localeCompare(b.name),
   );
@@ -24,6 +25,7 @@ export default function Sidebar({ services, connected }: Props) {
         width: 210,
         flexShrink: 0,
         fontFamily: "'SF Mono','Fira Code',monospace",
+        ...style,
       }}
     >
       {/* Header */}

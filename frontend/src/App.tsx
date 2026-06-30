@@ -1,11 +1,12 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useSSH } from "./hooks/useSSH";
 import { useWasmSSH } from "./hooks/useWasmSSH";
 import Terminal from "./components/Terminal";
 import Sidebar from "./components/Sidebar";
 import Onboarding from "./components/Onboarding";
+import ThemePicker from "./components/ThemePicker";
 import { LabConfig, SSHConfig, AppMode } from "./types";
-import { getTheme, ThemeId } from "./themes";
+import { getTheme, ThemeId, themeList } from "./themes";
 
 const CONFIG_VERSION = 2;
 
@@ -16,9 +17,12 @@ function loadConfig(): AppConfig | null {
     const raw = localStorage.getItem("ssh-lab-config");
     if (!raw) return null;
     const cfg = JSON.parse(raw);
-    if (cfg._version !== CONFIG_VERSION) return null;
-    if (cfg.hostname && cfg.hostname.includes("ecg")) return null;
-    return cfg;
+    if (!cfg || typeof cfg !== "object") return null;
+    // Validate as LabConfig (has hostname + username)
+    if (cfg.hostname && cfg.username) return cfg as AppConfig;
+    // Validate as SSHConfig (has host)
+    if (cfg.host) return cfg as AppConfig;
+    return null;
   } catch {}
   return null;
 }
@@ -52,19 +56,26 @@ function getRunMode(): "server" | "wasm" {
 function loadTheme(): ThemeId {
   try {
     const t = localStorage.getItem("ssh-lab-theme") as ThemeId | null;
-    if (t === "monochrome" || t === "terminal" || t === "ocean") return t;
+    if (t && themeList.some((th) => th.id === t)) return t;
   } catch {}
   return "monochrome";
 }
 
-const themes: { id: ThemeId; label: string }[] = [
-  { id: "monochrome", label: "BW" },
-  { id: "terminal", label: "Term" },
-  { id: "ocean", label: "Ocean" },
-];
 
 export default function App() {
   const [config, setConfig] = useState<AppConfig | null>(loadConfig);
+  const [isMobile, setIsMobile] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
+
   const [appMode, setAppMode] = useState<AppMode>(loadMode);
   const [themeId, setThemeId] = useState<ThemeId>(loadTheme);
   const mode = useMemo(getRunMode, []);
@@ -154,7 +165,7 @@ export default function App() {
           flexShrink: 0,
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           <span
             style={{
               fontSize: 13,
@@ -173,19 +184,7 @@ export default function App() {
               fontFamily: "monospace",
             }}
           >
-            {hostname} · {isLab ? "Lab" : "SSH"}
-          </span>
-          <span
-            style={{
-              fontSize: 9,
-              color: theme.textDim,
-              fontFamily: "monospace",
-              border: `1px solid ${theme.border}`,
-              borderRadius: 3,
-              padding: "1px 5px",
-            }}
-          >
-            {appMode}
+            {isMobile ? hostname : `${hostname} · ${isLab ? "Lab" : "SSH"}`}
           </span>
           <span
             onClick={() => {
@@ -206,27 +205,32 @@ export default function App() {
           </span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {themes.map((t) => (
-            <span
-              key={t.id}
-              onClick={() => {
-                setThemeId(t.id);
-                localStorage.setItem("ssh-lab-theme", t.id);
-              }}
+          {isMobile && isLab && (
+            <button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
               style={{
-                fontSize: 9,
-                fontFamily: "monospace",
+                background: "transparent",
+                border: `1px solid ${theme.border}`,
+                color: theme.textMuted,
                 cursor: "pointer",
                 padding: "2px 6px",
+                fontSize: 9,
+                fontFamily: "monospace",
                 borderRadius: 3,
-                border: `1px solid ${themeId === t.id ? theme.accent : theme.border}`,
-                color: themeId === t.id ? theme.accent : theme.textDim,
-                background: themeId === t.id ? theme.border : "transparent",
+                marginRight: 6,
               }}
             >
-              {t.label}
-            </span>
-          ))}
+              {sidebarOpen ? "close" : "services"}
+            </button>
+          )}
+          <ThemePicker
+            currentThemeId={themeId}
+            onSelect={(id) => {
+              setThemeId(id);
+              localStorage.setItem("ssh-lab-theme", id);
+            }}
+            theme={theme}
+          />
           <div
             style={{
               width: 6,
@@ -248,7 +252,7 @@ export default function App() {
       </div>
 
       {/* Main area */}
-      <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
+      <div style={{ flex: 1, display: "flex", overflow: "hidden", position: "relative" }}>
         <Terminal
           lines={lines}
           onCommand={handleCommand}
@@ -261,7 +265,34 @@ export default function App() {
           theme={theme}
         />
         {isLab && (
-          <Sidebar services={services} connected={connected} theme={theme} />
+          <Sidebar
+            services={services}
+            connected={connected}
+            theme={theme}
+            style={isMobile ? {
+              position: "absolute",
+              right: 0,
+              top: 0,
+              bottom: 0,
+              zIndex: 100,
+              boxShadow: "-4px 0 16px rgba(0,0,0,0.5)",
+              display: sidebarOpen ? "flex" : "none",
+            } : {}}
+          />
+        )}
+        {isMobile && sidebarOpen && (
+          <div
+            onClick={() => setSidebarOpen(false)}
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: "rgba(0,0,0,0.4)",
+              zIndex: 90,
+            }}
+          />
         )}
       </div>
     </div>

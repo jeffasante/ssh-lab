@@ -16,10 +16,40 @@
             body,
             #root {
                 height: 100%;
+                height: 100dvh; /* dynamic viewport on mobile */
             }
             body {
                 background: var(--theme-bg, #111);
                 font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+                /* prevent bounce/overscroll on iOS */
+                overscroll-behavior: none;
+            }
+            /* Terminal output area — allow touch scrolling */
+            .terminal-output {
+                -webkit-overflow-scrolling: touch;
+                touch-action: pan-y;
+            }
+            /* Nano shortcuts: 6-col on desktop, 2-col on mobile */
+            .nano-shortcuts-grid {
+                display: grid;
+                grid-template-columns: repeat(6, 1fr);
+                grid-template-rows: repeat(2, auto);
+                grid-auto-flow: column;
+                gap: 6px 12px;
+            }
+            @media (max-width: 600px) {
+                .nano-shortcuts-grid {
+                    grid-template-columns: repeat(2, 1fr);
+                    grid-template-rows: unset;
+                    grid-auto-flow: row;
+                    gap: 5px 8px;
+                    font-size: 11px;
+                }
+            }
+            /* Prevent text selection flash on mobile taps */
+            button, span[role="button"] {
+                -webkit-tap-highlight-color: transparent;
+                user-select: none;
             }
         </style>
     </head>

@@ -41,6 +41,9 @@ export default function Terminal({
   const inputRef = useRef<HTMLInputElement>(null);
   const pendingRef = useRef(false);
   const linesLenRef = useRef(0);
+  // Always-current count of lines — updated in useEffect, never from closure
+  const liveCountRef = useRef(0);
+
   const [pending, setPending] = useState(false);
   const [input, setInput] = useState("");
   const [history, setHistory] = useState<string[]>([]);
@@ -65,16 +68,27 @@ export default function Terminal({
     }
   }, [nanoFile]);
 
-  useEffect(() => {
+  const scrollToBottom = () => {
     if (outRef.current) {
       outRef.current.scrollTop = outRef.current.scrollHeight;
     }
-    // Unblock input when new lines arrive after a submitted command
+  };
+
+  useEffect(() => {
+    // Keep liveCountRef always in sync with the real current lines count
+    liveCountRef.current = lines.length;
+    // Auto-scroll output on every new line
+    scrollToBottom();
+    // Unblock input when server responds with new lines after a command
     if (pendingRef.current && lines.length > linesLenRef.current) {
       pendingRef.current = false;
       setPending(false);
+      // Restore focus + re-scroll after React re-renders the prompt
+      setTimeout(() => {
+        inputRef.current?.focus();
+        scrollToBottom();
+      }, 50);
     }
-    linesLenRef.current = lines.length;
   }, [lines]);
 
   const submit = () => {
@@ -88,6 +102,7 @@ export default function Terminal({
 
     if (cmd === "clear" || cmd === "reset") {
       onClear();
+      setTimeout(() => inputRef.current?.focus(), 0);
       return;
     }
 
@@ -97,13 +112,17 @@ export default function Terminal({
 
     onCommand(cmd);
 
-    // Block input until response arrives
+    // Block input until server responds with new lines.
+    // Use liveCountRef (always current) instead of the closure's `lines` prop.
     if (cmd) {
       pendingRef.current = true;
-      linesLenRef.current = lines.length;
+      linesLenRef.current = liveCountRef.current; // ← always-current snapshot
       setPending(true);
+    } else {
+      setTimeout(() => inputRef.current?.focus(), 0);
     }
   };
+
 
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     // Ctrl+C or Cmd+C → interrupt running command
@@ -345,6 +364,18 @@ export default function Terminal({
     }
   };
 
+  const nanoBtn: React.CSSProperties = {
+    background: "#555",
+    border: "none",
+    color: "#fff",
+    fontFamily: "'Courier New',monospace",
+    fontSize: 13,
+    cursor: "pointer",
+    padding: "0 6px",
+    marginLeft: 4,
+    borderRadius: 2,
+  };
+
   if (nanoFile) {
     const handleTextareaChange = (
       e: React.ChangeEvent<HTMLTextAreaElement>,
@@ -401,36 +432,40 @@ export default function Terminal({
       }
     };
 
+    const nanoLineCount = nanoContent.split("\n").length;
+
     return (
       <div
         style={{
           flex: 1,
           display: "flex",
           flexDirection: "column",
-          background: "#111",
+          background: "#000",
           overflow: "hidden",
-          fontFamily: "'SF Mono','Fira Code','Cascadia Code',monospace",
+          fontFamily: "'Courier New','Lucida Console',monospace",
+          fontSize: 13,
         }}
       >
-        {/* Nano header */}
+        {/* ── PICO Header ── */}
         <div
           style={{
             background: "#ccc",
-            color: "#111",
-            padding: "4px 12px",
+            color: "#000",
+            padding: "2px 8px",
             display: "flex",
             justifyContent: "space-between",
-            fontSize: 12,
-            fontFamily: "monospace",
-            fontWeight: "bold",
+            fontSize: 13,
+            fontWeight: "normal",
+            letterSpacing: "0.02em",
+            lineHeight: "20px",
           }}
         >
-          <span> UW PICO 5.09</span>
+          <span>UW PICO 5.09</span>
           <span>File: {nanoTempFilename}</span>
-          <span style={{ minWidth: 60, textAlign: "right" }}>{nanoModified ? "Modified" : ""}</span>
+          <span>{nanoModified ? "Modified" : ""}</span>
         </div>
 
-        {/* Text area for editing */}
+        {/* ── Editing area ── */}
         <textarea
           value={nanoContent}
           onChange={handleTextareaChange}
@@ -438,219 +473,151 @@ export default function Terminal({
           spellCheck={false}
           style={{
             flex: 1,
-            background: "#111",
+            background: "#000",
             color: "#d4d4d4",
             border: "none",
-            padding: "12px 16px",
+            padding: "4px 8px",
             fontFamily: "inherit",
-            fontSize: 12.5,
-            lineHeight: 1.65,
+            fontSize: 13,
+            lineHeight: 1.55,
             resize: "none",
             outline: "none",
+            caretColor: "#d4d4d4",
           }}
           onKeyDown={(e) => {
             if (nanoPrompt !== "none") {
               e.preventDefault();
               if (nanoPrompt === "exit-confirm") {
-                if (e.key.toLowerCase() === "y") {
-                  handlePromptResponse("y");
-                } else if (e.key.toLowerCase() === "n") {
-                  handlePromptResponse("n");
-                } else if (e.key === "Escape" || (e.ctrlKey && e.key === "c")) {
-                  handlePromptResponse("cancel");
-                }
+                if (e.key.toLowerCase() === "y") handlePromptResponse("y");
+                else if (e.key.toLowerCase() === "n") handlePromptResponse("n");
+                else if (e.key === "Escape" || (e.ctrlKey && e.key === "c")) handlePromptResponse("cancel");
               }
               return;
             }
-            if (e.ctrlKey && e.key === "x") {
-              e.preventDefault();
-              handleNanoExit();
-            } else if (e.ctrlKey && e.key === "o") {
-              e.preventDefault();
-              setNanoPrompt("save-name");
-            }
+            if (e.ctrlKey && e.key === "x") { e.preventDefault(); handleNanoExit(); }
+            else if (e.ctrlKey && e.key === "o") { e.preventDefault(); setNanoPrompt("save-name"); }
           }}
         />
 
-        {/* Nano footer */}
+        {/* ── Footer ── */}
         <div
           style={{
-            background: "#111",
+            background: "#000",
             borderTop: "1px solid #333",
-            padding: "10px 14px",
-            fontSize: 12,
-            display: "flex",
-            flexDirection: "column",
-            gap: 8,
+            fontSize: 13,
+            fontFamily: "inherit",
           }}
         >
-          {/* Status or Prompt line */}
-          <div style={{ color: "#d4d4d4", minHeight: 18, fontFamily: "monospace" }}>
-            {nanoPrompt === "exit-confirm" && (
-              <span>
-                Save modified buffer? (Answering "No" will discard changes.)
-                [Y/N/Cancel]:{" "}
-                <button
-                  onClick={() => handlePromptResponse("y")}
-                  style={{
-                    background: "#222",
-                    border: "1px solid #444",
-                    color: "#ccc",
-                    marginRight: 6,
-                    cursor: "pointer",
-                    padding: "1px 6px",
-                  }}
-                >
-                  Yes (Y)
-                </button>
-                <button
-                  onClick={() => handlePromptResponse("n")}
-                  style={{
-                    background: "#222",
-                    border: "1px solid #444",
-                    color: "#ccc",
-                    marginRight: 6,
-                    cursor: "pointer",
-                    padding: "1px 6px",
-                  }}
-                >
-                  No (N)
-                </button>
-                <button
-                  onClick={() => handlePromptResponse("cancel")}
-                  style={{
-                    background: "#222",
-                    border: "1px solid #444",
-                    color: "#ccc",
-                    cursor: "pointer",
-                    padding: "1px 6px",
-                  }}
-                >
-                  Cancel
-                </button>
-              </span>
-            )}
-            {nanoPrompt === "save-name" && (
-              <span>
-                File Name to Write:{" "}
-                <input
-                  value={nanoTempFilename}
-                  onChange={(e) => setNanoTempFilename(e.target.value)}
-                  autoFocus
-                  style={{
-                    background: "#222",
-                    border: "1px solid #444",
-                    color: "#d4d4d4",
-                    padding: "1px 4px",
-                    fontSize: 11,
-                    fontFamily: "inherit",
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      handlePromptResponse("confirm");
-                    } else if (e.key === "Escape" || (e.ctrlKey && e.key === "c")) {
-                      handlePromptResponse("cancel");
-                    }
-                  }}
-                />
-                <button
-                  onClick={() => handlePromptResponse("confirm")}
-                  style={{
-                    background: "#222",
-                    border: "1px solid #444",
-                    color: "#ccc",
-                    marginLeft: 6,
-                    cursor: "pointer",
-                    padding: "1px 6px",
-                  }}
-                >
-                  Write
-                </button>
-                <button
-                  onClick={() => handlePromptResponse("cancel")}
-                  style={{
-                    background: "#222",
-                    border: "1px solid #444",
-                    color: "#ccc",
-                    marginLeft: 6,
-                    cursor: "pointer",
-                    padding: "1px 6px",
-                  }}
-                >
-                  Cancel
-                </button>
-              </span>
-            )}
-            {nanoPrompt === "none" &&
-              (nanoStatus ||
-                `[ Read ${nanoContent.split("\n").length} lines ]`)}
+          {/* Status / prompt line */}
+          <div
+            style={{
+              padding: "2px 8px",
+              color: "#d4d4d4",
+              minHeight: 20,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
+            <span>
+              {nanoPrompt === "exit-confirm" && (
+                <>
+                  Save modified buffer? (Answering "No" will DISCARD changes) [Y/N] :{" "}
+                  <button onClick={() => handlePromptResponse("y")} style={nanoBtn}>Y</button>
+                  <button onClick={() => handlePromptResponse("n")} style={nanoBtn}>N</button>
+                  <button onClick={() => handlePromptResponse("cancel")} style={{ ...nanoBtn, marginLeft: 8 }}>Cancel</button>
+                </>
+              )}
+              {nanoPrompt === "save-name" && (
+                <>
+                  File Name to Write:{" "}
+                  <input
+                    value={nanoTempFilename}
+                    onChange={(e) => setNanoTempFilename(e.target.value)}
+                    autoFocus
+                    style={{
+                      background: "#ccc", color: "#000", border: "none",
+                      fontFamily: "inherit", fontSize: 13, padding: "0 4px", width: 200,
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handlePromptResponse("confirm");
+                      else if (e.key === "Escape") handlePromptResponse("cancel");
+                    }}
+                  />
+                  <button onClick={() => handlePromptResponse("confirm")} style={nanoBtn}>Write</button>
+                </>
+              )}
+              {nanoPrompt === "none" && (nanoStatus || "")}
+            </span>
+            {/* Status bar right: Ln / Col */}
+            <span style={{ color: "#888", fontSize: 12 }}>
+              Ln {nanoLineCount}&nbsp;&nbsp;Col 1&nbsp;&nbsp;Space
+            </span>
           </div>
 
-          {/* Shortcuts Grid */}
+          {/* Shortcuts grid */}
           <div
+            className="nano-shortcuts-grid"
             style={{
               display: "grid",
               gridTemplateColumns: "repeat(6, 1fr)",
               gridTemplateRows: "repeat(2, auto)",
               gridAutoFlow: "column",
-              gap: "6px 12px",
-              color: "#aaa",
-              fontSize: 11.5,
-              fontFamily: "monospace",
+              gap: 0,
+              padding: "4px 4px 6px",
+              color: "#d4d4d4",
+              fontSize: 12,
+              fontFamily: "inherit",
             }}
           >
-            {/* Column 1 */}
-            <div>
-              <span style={{ background: "#ccc", color: "#111", padding: "0px 3px", marginRight: 4, fontWeight: "bold" }}>^G</span> Get Help
-            </div>
-            <div onClick={handleNanoExit} style={{ cursor: "pointer" }}>
-              <span style={{ background: "#ccc", color: "#111", padding: "0px 3px", marginRight: 4, fontWeight: "bold" }}>^X</span> Exit
-            </div>
-
-            {/* Column 2 */}
-            <div onClick={() => setNanoPrompt("save-name")} style={{ cursor: "pointer" }}>
-              <span style={{ background: "#ccc", color: "#111", padding: "0px 3px", marginRight: 4, fontWeight: "bold" }}>^O</span> WriteOut
-            </div>
-            <div>
-              <span style={{ background: "#ccc", color: "#111", padding: "0px 3px", marginRight: 4, fontWeight: "bold" }}>^J</span> Justify
-            </div>
-
-            {/* Column 3 */}
-            <div>
-              <span style={{ background: "#ccc", color: "#111", padding: "0px 3px", marginRight: 4, fontWeight: "bold" }}>^R</span> Read File
-            </div>
-            <div>
-              <span style={{ background: "#ccc", color: "#111", padding: "0px 3px", marginRight: 4, fontWeight: "bold" }}>^W</span> Where is
-            </div>
-
-            {/* Column 4 */}
-            <div>
-              <span style={{ background: "#ccc", color: "#111", padding: "0px 3px", marginRight: 4, fontWeight: "bold" }}>^Y</span> Prev Pg
-            </div>
-            <div>
-              <span style={{ background: "#ccc", color: "#111", padding: "0px 3px", marginRight: 4, fontWeight: "bold" }}>^V</span> Next Pg
-            </div>
-
-            {/* Column 5 */}
-            <div>
-              <span style={{ background: "#ccc", color: "#111", padding: "0px 3px", marginRight: 4, fontWeight: "bold" }}>^K</span> Cut Text
-            </div>
-            <div>
-              <span style={{ background: "#ccc", color: "#111", padding: "0px 3px", marginRight: 4, fontWeight: "bold" }}>^U</span> UnCut Text
-            </div>
-
-            {/* Column 6 */}
-            <div>
-              <span style={{ background: "#ccc", color: "#111", padding: "0px 3px", marginRight: 4, fontWeight: "bold" }}>^C</span> Cur Pos
-            </div>
-            <div>
-              <span style={{ background: "#ccc", color: "#111", padding: "0px 3px", marginRight: 4, fontWeight: "bold" }}>^T</span> To Spell
-            </div>
+            {[
+              { key: "^G", label: "Get Help", onClick: undefined },
+              { key: "^X", label: "Exit", onClick: handleNanoExit },
+              { key: "^O", label: "WriteOut", onClick: () => setNanoPrompt("save-name") },
+              { key: "^J", label: "Justify", onClick: undefined },
+              { key: "^R", label: "Read File", onClick: undefined },
+              { key: "^W", label: "Where is", onClick: undefined },
+              { key: "^Y", label: "Prev Pg", onClick: undefined },
+              { key: "^V", label: "Next Pg", onClick: undefined },
+              { key: "^K", label: "Cut Text", onClick: undefined },
+              { key: "^U", label: "UnCut Text", onClick: undefined },
+              { key: "^C", label: "Cur Pos", onClick: undefined },
+              { key: "^T", label: "To Spell", onClick: undefined },
+            ].map(({ key, label, onClick }) => (
+              <div
+                key={key}
+                onClick={onClick}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4,
+                  padding: "1px 6px",
+                  cursor: onClick ? "pointer" : "default",
+                }}
+              >
+                <span
+                  style={{
+                    background: "#555",
+                    color: "#fff",
+                    padding: "0 3px",
+                    borderRadius: 2,
+                    fontSize: 11,
+                    fontWeight: "bold",
+                    whiteSpace: "nowrap",
+                    letterSpacing: "-0.02em",
+                  }}
+                >
+                  {key}
+                </span>
+                <span style={{ color: "#d4d4d4", whiteSpace: "nowrap" }}>{label}</span>
+              </div>
+            ))}
           </div>
         </div>
       </div>
     );
   }
+
 
   const promptLabel = `${username}@${hostname}:~$`;
 
@@ -779,7 +746,7 @@ export default function Terminal({
         )}
       </div>
 
-      {/* Hidden real input */}
+      {/* Hidden real input — pointerEvents must stay 'none' visually but we programmatic-focus on click */}
       {!exited && (
         <input
           ref={inputRef}
@@ -788,6 +755,8 @@ export default function Terminal({
           onKeyDown={onKeyDown}
           autoFocus
           autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="none"
           spellCheck={false}
           disabled={!connected || pending}
           style={{
@@ -796,6 +765,7 @@ export default function Terminal({
             pointerEvents: "none",
             width: 1,
             height: 1,
+            fontSize: 16, /* prevent iOS zoom on focus */
           }}
         />
       )}
