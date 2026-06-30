@@ -85,18 +85,18 @@ export default function App() {
   const theme = useMemo(() => getTheme(themeId), [themeId]);
 
   const isLab = appMode === "lab";
-  const labConfig = isLab ? (config as LabConfig) : null;
   const isC2W = appMode === "c2w";
   const isSSH = appMode === "ssh";
   const useWasm = mode === "wasm" && !isC2W;
+  const labConfig = isLab || isC2W ? (config as LabConfig) : null;
   const c2wKey = Object.keys(C2W_IMAGES)[0];
 
   // Call ALL hooks unconditionally with null-safe params
   const labResult = useSSH(
-    isSSH ? null : labConfig,
+    isSSH ? null : isLab ? labConfig : null,
     isSSH ? (config as SSHConfig) : undefined,
   );
-  const wasmResult = useWasmSSH(labConfig);
+  const wasmResult = useWasmSSH(isC2W || isSSH ? null : labConfig);
   const c2wResult = useContainer2Wasm(
     isC2W ? labConfig : null,
     isC2W ? c2wKey : undefined,
