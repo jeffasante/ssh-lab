@@ -352,21 +352,24 @@ export default function Onboarding({
           >
             Lab
           </span>
-          <span
-            onClick={() => setMode("c2w")}
-            style={{
-              fontSize: 11,
-              fontFamily: "'SF Mono','Fira Code',monospace",
-              cursor: "pointer",
-              padding: "5px 10px",
-              border: `1px solid ${mode === "c2w" ? activeColor : "#30363d"}`,
-              borderRadius: 0,
-              color: mode === "c2w" ? activeColor : "#6e7681",
-              background: mode === "c2w" ? "#0d1117" : "transparent",
-            }}
-          >
-            Debian
-          </span>
+          {/* Debian/container mode requires SharedArrayBuffer (COOP/COEP headers) */}
+          {typeof SharedArrayBuffer !== "undefined" && (
+            <span
+              onClick={() => setMode("c2w")}
+              style={{
+                fontSize: 11,
+                fontFamily: "'SF Mono','Fira Code',monospace",
+                cursor: "pointer",
+                padding: "5px 10px",
+                border: `1px solid ${mode === "c2w" ? activeColor : "#30363d"}`,
+                borderRadius: 0,
+                color: mode === "c2w" ? activeColor : "#6e7681",
+                background: mode === "c2w" ? "#0d1117" : "transparent",
+              }}
+            >
+              Debian
+            </span>
+          )}
           <span
             onClick={() => setMode("ssh")}
             style={{
