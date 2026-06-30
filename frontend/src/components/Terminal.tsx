@@ -752,6 +752,7 @@ export default function Terminal({
                 — session ended. Refresh to reconnect. —
               </div>
             );
+          const isLast = i === lines.length - 1;
           return (
             <div
               key={i}
@@ -759,29 +760,42 @@ export default function Terminal({
                 color: classColors(theme)[ln.class] ?? theme.text,
                 whiteSpace: "pre-wrap",
                 wordBreak: "break-all",
+                display: isLast && !showPrompt ? "inline" : "block",
               }}
             >
               {ln.text || "\u00A0"}
+              {/* For container sessions, render cursor inline after the last line */}
+              {isLast && !showPrompt && !exited && (
+                <span
+                  style={{
+                    display: "inline-block",
+                    width: 7,
+                    height: 14,
+                    background: "#d4d4d4",
+                    marginLeft: 1,
+                    animation: "blink 1s step-end infinite",
+                    verticalAlign: "text-bottom",
+                  }}
+                />
+              )}
             </div>
           );
         })}
 
-        {/* Live prompt — promptLabel hidden for container/PTY sessions that produce their own prompt */}
-        {!exited && (
+        {/* Live prompt — only shown for non-container sessions */}
+        {!exited && showPrompt && (
           <div style={{ display: "flex", alignItems: "center", marginTop: 2 }}>
-            {showPrompt && (
-              <span
-                style={{
-                  color: "#e0e0e0",
-                  fontFamily: "monospace",
-                  fontSize: 12.5,
-                  whiteSpace: "nowrap",
-                  marginRight: 6,
-                }}
-              >
-                {promptLabel}
-              </span>
-            )}
+            <span
+              style={{
+                color: "#e0e0e0",
+                fontFamily: "monospace",
+                fontSize: 12.5,
+                whiteSpace: "nowrap",
+                marginRight: 6,
+              }}
+            >
+              {promptLabel}
+            </span>
             <span style={{ color: "#d4d4d4", fontSize: 12.5 }}>{input}</span>
             <span
               style={{
