@@ -117,10 +117,7 @@ async function loadC2WImage(
       const encoder = new TextEncoder();
       const bytes = encoder.encode(data);
       (slave as any).ldisc.writeFromLower(bytes);
-      // Force flush in case non-canonical mode was changed
-      if (!(slave as any).ldisc.T.ICANON_P) {
-        (slave as any).ldisc.flushToUpper();
-      }
+      (slave as any).ldisc.flushToUpper();
     },
     destroy: () => {
       worker.terminate();
