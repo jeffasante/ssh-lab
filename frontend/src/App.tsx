@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useSSH } from "./hooks/useSSH";
 import { useWasmSSH } from "./hooks/useWasmSSH";
+import { useContainer2Wasm, C2W_IMAGES } from "./hooks/useContainer2Wasm";
 import Terminal from "./components/Terminal";
 import Sidebar from "./components/Sidebar";
 import Onboarding from "./components/Onboarding";
@@ -43,12 +44,14 @@ function saveConfig(config: AppConfig, mode: AppMode) {
   localStorage.setItem("ssh-lab-app-mode", mode);
 }
 
-function getRunMode(): "server" | "wasm" {
+function getRunMode(): "server" | "wasm" | "c2w" {
   if (typeof window === "undefined") return "server";
   const params = new URLSearchParams(window.location.search);
+  if (params.get("mode") === "wasm" && params.get("c2w") === "1") return "c2w";
   if (params.get("mode") === "wasm") return "wasm";
   if (params.get("server") === "1") return "server";
   const stored = localStorage.getItem("ssh-lab-mode");
+  if (stored === "c2w") return "c2w";
   if (stored === "wasm" || stored === "server") return stored;
   return "server";
 }
@@ -60,7 +63,6 @@ function loadTheme(): ThemeId {
   } catch {}
   return "monochrome";
 }
-
 
 export default function App() {
   const [config, setConfig] = useState<AppConfig | null>(loadConfig);
@@ -85,7 +87,14 @@ export default function App() {
   const isLab = appMode === "lab";
   const labConfig = isLab ? (config as LabConfig) : null;
 
-  const sshHooks = mode === "wasm" ? useWasmSSH : useSSH;
+  let hookResult: ReturnType<typeof useSSH>;
+  if (mode === "c2w") {
+    const imageKey = Object.keys(C2W_IMAGES)[0];
+    hookResult = useContainer2Wasm(labConfig, imageKey);
+  } else {
+    const sshHooks = mode === "wasm" ? useWasmSSH : useSSH;
+    hookResult = sshHooks(labConfig, isLab ? undefined : (config as SSHConfig));
+  }
   const {
     lines,
     services,
@@ -94,25 +103,13 @@ export default function App() {
     clearLines,
     nanoFile,
     setNanoFile,
-  } = sshHooks(labConfig, isLab ? undefined : (config as SSHConfig));
+  } = hookResult;
 
   const handleCommand = (cmd: string) => {
     sendCommand(cmd);
   };
 
-  if (!config) {
-    return (
-      <Onboarding
-        onComplete={(c, m) => {
-          saveConfig(c, m);
-          setAppMode(m);
-          setConfig(c);
-        }}
-      />
-    );
-  }
-
-  // Inject CSS variables into document root
+  // Inject CSS variables into document root — MUST be before any early return
   React.useEffect(() => {
     const root = document.documentElement;
     root.style.setProperty("--theme-bg", theme.bg);
@@ -140,6 +137,20 @@ export default function App() {
     document.head.appendChild(sheet);
   }, [theme]);
 
+  if (!config) {
+    return (
+      <Onboarding
+        onComplete={(c, m) => {
+          saveConfig(c, m);
+          setAppMode(m);
+          setConfig(c);
+        }}
+      />
+    );
+  }
+
+  // (moved above)
+
   const hostname = isLab
     ? (config as LabConfig).hostname
     : (config as SSHConfig).host;
@@ -165,7 +176,14 @@ export default function App() {
           flexShrink: 0,
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            flexWrap: "wrap",
+          }}
+        >
           <span
             style={{
               fontSize: 13,
@@ -252,7 +270,14 @@ export default function App() {
       </div>
 
       {/* Main area */}
-      <div style={{ flex: 1, display: "flex", overflow: "hidden", position: "relative" }}>
+      <div
+        style={{
+          flex: 1,
+          display: "flex",
+          overflow: "hidden",
+          position: "relative",
+        }}
+      >
         <Terminal
           lines={lines}
           onCommand={handleCommand}
@@ -264,20 +289,24 @@ export default function App() {
           setNanoFile={setNanoFile}
           theme={theme}
         />
-        {isLab && (
+        {isLab && mode !== "c2w" && (
           <Sidebar
             services={services}
             connected={connected}
             theme={theme}
-            style={isMobile ? {
-              position: "absolute",
-              right: 0,
-              top: 0,
-              bottom: 0,
-              zIndex: 100,
-              boxShadow: "-4px 0 16px rgba(0,0,0,0.5)",
-              display: sidebarOpen ? "flex" : "none",
-            } : {}}
+            style={
+              isMobile
+                ? {
+                    position: "absolute",
+                    right: 0,
+                    top: 0,
+                    bottom: 0,
+                    zIndex: 100,
+                    boxShadow: "-4px 0 16px rgba(0,0,0,0.5)",
+                    display: sidebarOpen ? "flex" : "none",
+                  }
+                : {}
+            }
           />
         )}
         {isMobile && sidebarOpen && (
