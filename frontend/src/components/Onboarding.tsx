@@ -384,6 +384,26 @@ export default function Onboarding({
           </span>
         </div>
 
+        {/* Debian username */}
+        {mode === "c2w" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <div style={labelSx}>your username</div>
+            <input
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="user"
+              style={inputSx}
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleStart();
+              }}
+            />
+            <div style={{ fontSize: 10, color: "#484f58", marginTop: -4 }}>
+              this will be your user in the Debian container
+            </div>
+          </div>
+        )}
+
         {/* SSH connection form */}
         {mode === "ssh" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>

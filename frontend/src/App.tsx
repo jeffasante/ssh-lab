@@ -302,7 +302,13 @@ export default function App() {
           onCommand={handleCommand}
           onClear={clearLines}
           connected={connected}
-          username={isLab ? (config as LabConfig).username : ""}
+          username={
+            isLab
+              ? (config as LabConfig).username
+              : appMode === "c2w"
+                ? (config as LabConfig).username
+                : ""
+          }
           hostname={hostname}
           nanoFile={nanoFile}
           setNanoFile={setNanoFile}
