@@ -21,3 +21,6 @@ Thumbs.db
 
 # Docker
 .env
+
+# Large WASM binaries (downloaded separately)
+frontend/public/c2w/*.wasm
