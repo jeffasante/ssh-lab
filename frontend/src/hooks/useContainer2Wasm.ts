@@ -28,19 +28,8 @@ type UseSSHReturn = {
   setNanoFile: (file: NanoFile | null) => void;
 };
 
-const DEMO_ORIGIN = "https://ktock.github.io";
-
-export const C2W_IMAGES: Record<
-  string,
-  { prefix: string; chunks: number; label: string }
-> = {
-  debian: {
-    prefix:
-      DEMO_ORIGIN +
-      "/container2wasm-demo/containers/riscv64-debian-wasi-container",
-    chunks: 3,
-    label: "Debian (129MB)",
-  },
+export const C2W_IMAGES: Record<string, { url: string; label: string }> = {
+  debian: { url: "/c2w/debian.wasm", label: "Debian (129MB)" },
 };
 
 interface C2WInstance {
@@ -48,11 +37,55 @@ interface C2WInstance {
   destroy: () => void;
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes >= 1000000000) return (bytes / 1000000000).toFixed(1) + " GB";
+  if (bytes >= 1000000) return (bytes / 1000000).toFixed(1) + " MB";
+  if (bytes >= 1000) return (bytes / 1000).toFixed(0) + " KB";
+  return bytes + " B";
+}
+
 async function loadC2WImage(
-  imagePrefix: string,
-  chunkCount: number,
+  imageUrl: string,
   onOutput: (chunk: string) => void,
 ): Promise<C2WInstance> {
+  // Download WASM with progress on main thread
+  onOutput("Loading " + imageUrl + "...\n");
+  const resp = await fetch(imageUrl);
+  if (!resp.ok) throw new Error("Failed to fetch: " + resp.status);
+  const total = parseInt(resp.headers.get("content-length") || "0", 10);
+  const reader = resp.body!.getReader();
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+  let lastPct = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    received += value.length;
+    const pct = total > 0 ? Math.round((received / total) * 100) : 0;
+    if (pct >= lastPct + 5 || pct === 100) {
+      lastPct = pct;
+      const bar =
+        "[" +
+        "#".repeat(Math.floor(pct / 5)) +
+        "-".repeat(20 - Math.floor(pct / 5)) +
+        "]";
+      onOutput(bar + " " + pct + "%  " + formatBytes(received) + "\n");
+    }
+  }
+  onOutput("[" + "#".repeat(20) + "] 100% " + formatBytes(total) + "\n");
+
+  // Concatenate chunks into single buffer
+  const totalLen = chunks.reduce((a, c) => a + c.length, 0);
+  const wasmBuf = new Uint8Array(totalLen);
+  let offset = 0;
+  for (const chunk of chunks) {
+    wasmBuf.set(chunk, offset);
+    offset += chunk.length;
+  }
+
+  onOutput("Starting kernel...\n");
+
   // Create PTY
   const { master, slave } = openpty();
 
@@ -76,12 +109,9 @@ async function loadC2WImage(
   const ttyServer = new TtyServer(slave);
   ttyServer.start(worker);
 
-  // Send init message with image info
-  worker.postMessage({
-    type: "init",
-    imagename: imagePrefix,
-    chunks: chunkCount,
-  });
+  // Transfer the WASM buffer to the worker
+  const wasmTransfer = wasmBuf.buffer.slice(0);
+  worker.postMessage({ type: "wasm", buffer: wasmTransfer }, [wasmTransfer]);
 
   return {
     stdin: (data: string) => {
@@ -140,7 +170,7 @@ export function useContainer2Wasm(
       ]);
 
       try {
-        const inst = await loadC2WImage(image.prefix, image.chunks, (chunk) =>
+        const inst = await loadC2WImage(image.url, (chunk) =>
           appendLines(chunk),
         );
         instanceRef.current = inst;

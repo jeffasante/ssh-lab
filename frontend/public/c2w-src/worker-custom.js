@@ -17,8 +17,9 @@ onmessage = (msg) => {
   var fds = [];
   var listenfd = 3;
 
-  fetchChunks((wasm) => {
-    // Set up networking proxy env vars (even without full stack, tools like curl read these)
+  // Accept either pre-loaded wasm buffer (type: 'wasm') or chunks (type: 'init')
+  if (msg.data.type === "wasm") {
+    var wasm = msg.data.buffer;
     env = [
       "SSL_CERT_FILE=/.wasmenv/proxy.crt",
       "https_proxy=http://192.168.127.253:80",
@@ -30,14 +31,29 @@ onmessage = (msg) => {
       undefined, // 0: stdin
       undefined, // 1: stdout
       undefined, // 2: stderr
-      undefined, // 3: cert dir (optional)
-      undefined, // 4: socket listenfd (no networking)
+      undefined, // 3: cert dir
+      undefined, // 4: socket listenfd
       undefined, // 5: accepted socket fd
     ];
     args = ["arg0", "--net=socket=listenfd=4", "--mac", genmac()];
     listenfd = 4;
     startWasi(wasm, ttyClient, args, env, fds, listenfd, 5);
-  });
+  } else {
+    // Legacy chunk-based loading (fetches from remote origin)
+    fetchChunks((wasm) => {
+      env = [
+        "SSL_CERT_FILE=/.wasmenv/proxy.crt",
+        "https_proxy=http://192.168.127.253:80",
+        "http_proxy=http://192.168.127.253:80",
+        "HTTPS_PROXY=http://192.168.127.253:80",
+        "HTTP_PROXY=http://192.168.127.253:80",
+      ];
+      fds = [undefined, undefined, undefined, undefined, undefined, undefined];
+      args = ["arg0", "--net=socket=listenfd=4", "--mac", genmac()];
+      listenfd = 4;
+      startWasi(wasm, ttyClient, args, env, fds, listenfd, 5);
+    });
+  }
 };
 
 function startWasi(wasm, ttyClient, args, env, fds, listenfd, connfd) {
