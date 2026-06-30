@@ -46,7 +46,7 @@ const API_INIT = `${window.location.protocol}//${window.location.host}/api/init`
 
 export function useSSH(
   config: LabConfig | null,
-  sshConfig?: SSHConfig,
+  sshConfig?: SSHConfig | "wasm",
 ): UseSSHReturn {
   const ws = useRef<WebSocket | null>(null);
   const [connected, setConnected] = useState(false);
@@ -54,7 +54,8 @@ export function useSSH(
   const [services, setServices] = useState<Record<string, ServiceInfo>>({});
   const [nanoFile, setNanoFile] = useState<NanoFile | null>(null);
   const inited = useRef(false);
-  const isSSH = !!sshConfig;
+  const isSSH = sshConfig === "wasm" ? false : !!sshConfig;
+  const isWasm = sshConfig === "wasm";
 
   const appendLines = useCallback((newLines: OutputLine[]) => {
     setLines((prev) => [...prev, ...newLines]);
@@ -66,17 +67,46 @@ export function useSSH(
     if (inited.current) return;
     inited.current = true;
 
+    if (isWasm) {
+      // WASM mode — connect to WebSocket and trigger wasmtime on server
+      const sock = new WebSocket(WS_URL);
+      ws.current = sock;
+      sock.onopen = () => {
+        sock.send(JSON.stringify({ mode: "wasm" }));
+      };
+      sock.onmessage = (e) => {
+        const msg: WSMessage = JSON.parse(e.data);
+        if (msg.type === "ssh_ready") {
+          setConnected(true);
+        } else if (msg.type === "ssh_output") {
+          const text = msg.payload as string;
+          const rawLines = text.split(/\r?\n/);
+          for (let i = 0; i < rawLines.length; i++) {
+            const line = rawLines[i];
+            if (i < rawLines.length - 1) {
+              appendLines([{ text: line || " ", class: "" }]);
+            } else if (line) {
+              appendLines([{ text: line, class: "" }]);
+            }
+          }
+        }
+      };
+      sock.onclose = () => setConnected(false);
+      return () => {
+        sock.close();
+      };
+    }
+
     if (isSSH) {
       // SSH mode — connect to WebSocket and send SSH config
       const sock = new WebSocket(WS_URL);
       ws.current = sock;
 
       sock.onopen = () => {
-        // Send SSH config as first message
         sock.send(
           JSON.stringify({
             mode: "ssh",
-            ssh: sshConfig,
+            ssh: sshConfig as SSHConfig,
           }),
         );
       };
@@ -87,7 +117,6 @@ export function useSSH(
           setConnected(true);
         } else if (msg.type === "ssh_output") {
           const text = msg.payload as string;
-          // Split SSH output into lines
           const rawLines = text.split(/\r?\n/);
           for (let i = 0; i < rawLines.length; i++) {
             const line = rawLines[i];

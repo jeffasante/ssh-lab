@@ -24,3 +24,4 @@ Thumbs.db
 
 # Large WASM binaries (downloaded separately)
 frontend/public/c2w/*.wasm
+server/c2w/debian.wasm

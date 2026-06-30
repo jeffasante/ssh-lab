@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useSSH } from "./hooks/useSSH";
 import { useWasmSSH } from "./hooks/useWasmSSH";
-import { useContainer2Wasm } from "./hooks/useContainer2Wasm";
+
 import Terminal from "./components/Terminal";
 import Sidebar from "./components/Sidebar";
 import Onboarding from "./components/Onboarding";
@@ -95,9 +95,9 @@ export default function App() {
     isSSH ? (config as SSHConfig) : undefined,
   );
   const wasmResult = useWasmSSH(isLab ? labConfig : null);
-  const c2wResult = useContainer2Wasm(
+  const c2wResult = useSSH(
     isC2W ? labConfig : null,
-    isC2W ? "/c2w/debian.wasm" : undefined,
+    isC2W ? "wasm" : undefined,
   );
 
   const hookResult = isC2W

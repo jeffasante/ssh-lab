@@ -88,6 +88,16 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// WASM mode — run container via wasmtime
+	if initReq.Mode == "wasm" {
+		sendJSON(conn, WSMessage{Type: "ssh_ready", Payload: "booting container..."})
+		if err := startWasmSession(conn); err != nil {
+			log.Println("wasm error:", err)
+			sendJSON(conn, WSMessage{Type: "ssh_output", Payload: fmt.Sprintf("\r\nWASM failed: %s\r\n", err)})
+		}
+		return
+	}
+
 	// SSH mode — connect to real server
 	if initReq.Mode == "ssh" {
 		sendJSON(conn, WSMessage{Type: "ssh_ready", Payload: "connecting..."})
