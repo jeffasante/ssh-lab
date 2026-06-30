@@ -110,6 +110,18 @@ export function useContainer2Wasm(
     const doInit = async () => {
       appendLine("Booting container...\n");
 
+      // SharedArrayBuffer is required by xterm-pty's TtyServer for
+      // communication between the main thread and the worker. It needs
+      // cross-origin isolation headers (COOP/COEP) which GitHub Pages
+      // cannot set. Check availability and fail gracefully.
+      if (typeof SharedArrayBuffer === "undefined") {
+        throw new Error(
+          "SharedArrayBuffer is not available. The container mode requires " +
+            "cross-origin isolation (COOP/COEP headers). Use the Lab or WASM " +
+            "mode instead, or run the app locally with the development server.",
+        );
+      }
+
       const { master, slave } = openpty();
       masterRef.current = master;
 
