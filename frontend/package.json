@@ -3,8 +3,10 @@
   "version": "1.0.0",
   "private": true,
   "dependencies": {
+    "@bjorn3/browser_wasi_shim": "^0.4.2",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "xterm-pty": "^0.12.0"
   },
   "devDependencies": {
     "@types/react": "^18.2.0",
