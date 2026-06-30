@@ -146,7 +146,7 @@ export function useContainer2Wasm(
       master.activate(bridge);
 
       // Create worker and TtyServer
-      const worker = new Worker("/c2w-src/worker-entry.js?v=" + Date.now());
+      const worker = new Worker("./c2w-src/worker-entry.js?v=" + Date.now());
       if (cancelled) {
         worker.terminate();
         return;
