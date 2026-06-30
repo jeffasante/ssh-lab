@@ -15,11 +15,10 @@ type UseSSHReturn = {
 };
 
 export const C2W_IMAGES: Record<string, { url: string; label: string }> = {
-  debian: { url: "/c2w/debian.wasm", label: "Debian" },
-  python: { url: "/c2w/python.wasm", label: "Python" },
-  node: { url: "/c2w/node.wasm", label: "Node.js" },
-  vim: { url: "/c2w/vim.wasm", label: "Vim" },
-  debiancurl: { url: "/c2w/debian-curl.wasm", label: "Debian + curl" },
+  debian: {
+    url: "https://ktock.github.io/container2wasm-demo/containers/riscv64-debian-wasi-container02.wasm",
+    label: "Debian (remote)",
+  },
 };
 
 interface C2WInstance {
