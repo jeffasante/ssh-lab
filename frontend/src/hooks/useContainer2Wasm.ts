@@ -118,7 +118,17 @@ async function loadC2WImage(
     stdin: (data: string) => {
       // Send user input through the PTY line discipline (lower/terminal side)
       const encoder = new TextEncoder();
-      (slave as any).ldisc.writeFromLower(encoder.encode(data));
+      const bytes = encoder.encode(data);
+      console.log(
+        "C2W stdin: sending",
+        bytes.length,
+        "bytes:",
+        JSON.stringify(data),
+      );
+      console.log("C2W stdin: slave.ldisc exists:", !!(slave as any).ldisc);
+      console.log("C2W stdin: slave readable:", (slave as any).readable);
+      (slave as any).ldisc.writeFromLower(bytes);
+      console.log("C2W stdin: slave readable after:", (slave as any).readable);
     },
     destroy: () => {
       worker.terminate();

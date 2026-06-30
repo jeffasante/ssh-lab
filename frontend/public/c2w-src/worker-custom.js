@@ -47,7 +47,9 @@ function startContainer(wasmBuffer, ttyClient) {
   // Patch fd_read for stdin
   var _fd_read = wasi.wasiImport.fd_read;
   wasi.wasiImport.fd_read = function (fd, iovs_ptr, iovs_len, nread_ptr) {
+    console.log("Worker: fd_read(" + fd + ")");
     if (fd == 0) {
+      console.log("Worker: stdin read requested");
       var buffer = new DataView(wasi.inst.exports.memory.buffer);
       var buffer8 = new Uint8Array(wasi.inst.exports.memory.buffer);
       var iovecs = Iovec.read_bytes_array(buffer, iovs_ptr, iovs_len);
