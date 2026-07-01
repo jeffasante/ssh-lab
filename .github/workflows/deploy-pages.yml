@@ -37,6 +37,31 @@ jobs:
           fi
           echo "OK: debian.wasm is a valid WASM binary."
 
+      - name: Download python.wasm from container2wasm demo
+        run: |
+          BASEURL="https://ktock.github.io/container2wasm-demo/containers"
+          OUTFILE="frontend/public/c2w/python.wasm"
+          IMG="riscv64-python-wasi"
+          echo "Downloading $IMG chunks..."
+          chunks=0
+          for i in $(seq -f "%02g" 0 99); do
+            url="$BASEURL/${IMG}-container${i}.wasm"
+            code=$(curl -sL -o /dev/null -w "%{http_code}" "$url")
+            if [ "$code" != "200" ]; then break; fi
+            curl -sL "$url" -o "/tmp/${IMG}-chunk-${i}.wasm" &
+            chunks=$((chunks+1))
+          done
+          wait
+          if [ $chunks -gt 0 ]; then
+            > "$OUTFILE"
+            for i in $(seq -f "%02g" 0 $((chunks-1))); do
+              cat "/tmp/${IMG}-chunk-${i}.wasm" >> "$OUTFILE"
+            done
+            echo "python.wasm ready: $(du -h "$OUTFILE" | cut -f1)"
+          else
+            echo "Warning: python.wasm chunks not found, skipping"
+          fi
+
       - name: Setup Go
         uses: actions/setup-go@v5
         with:

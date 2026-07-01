@@ -57,6 +57,7 @@ export default function Onboarding({
   const [profiles, setProfiles] = useState<StoredProfile[]>([]);
   const [showProfiles, setShowProfiles] = useState(false);
   const [mode, setMode] = useState<AppMode>("lab");
+  const [c2wImage, setC2wImage] = useState<"debian" | "python">("debian");
   const [step, setStep] = useState(1);
   const [username, setUsername] = useState(
     savedProfile && savedProfile.mode === "lab"
@@ -132,10 +133,11 @@ export default function Onboarding({
       onComplete(
         {
           username: "root",
-          hostname: "debian",
+          hostname: c2wImage,
           role,
           os,
           scenario: scenario as LabConfig["scenario"],
+          c2wImage,
         },
         "c2w",
       );
@@ -673,7 +675,34 @@ export default function Onboarding({
           )}
 
           {mode === "c2w" && (
-            <div style={{ width: "100%" }}>
+            <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 10 }}>
+              {/* Image picker */}
+              <div style={{ display: "flex", gap: 8 }}>
+                {(["debian", "python"] as const).map((img) => (
+                  <button
+                    key={img}
+                    onClick={() => setC2wImage(img)}
+                    style={{
+                      flex: 1,
+                      background: c2wImage === img ? "#1c2128" : "transparent",
+                      border: `1px solid ${c2wImage === img ? activeColor : "#30363d"}`,
+                      borderRadius: 4,
+                      color: c2wImage === img ? activeColor : "#6e7681",
+                      fontFamily: "'SF Mono','Fira Code',monospace",
+                      fontSize: 11,
+                      padding: "5px 0",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {img === "debian" ? "🐧 Debian" : "🐍 Python"}
+                  </button>
+                ))}
+              </div>
+              <div style={{ fontSize: 10, color: "#6e7681", fontFamily: "monospace" }}>
+                {c2wImage === "debian"
+                  ? "Basic Debian Linux (~130MB)"
+                  : "Debian + Python 3 (~100MB) — run python3, pip, scripts"}
+              </div>
               <button
                 onClick={handleStart}
                 style={{
@@ -688,7 +717,7 @@ export default function Onboarding({
                   cursor: "pointer",
                 }}
               >
-                boot debian →
+                boot {c2wImage} →
               </button>
             </div>
           )}

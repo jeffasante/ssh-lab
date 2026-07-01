@@ -48,9 +48,10 @@ export default function SessionTerminal({
     isSSH ? sshConfig : undefined,
   );
   const wasmResult = useWasmSSH(isLabInBrowserWasm ? labConfig : null);
+  const c2wImageName = (c2wConfig as LabConfig | null)?.c2wImage ?? "debian";
   const c2wResult = useContainer2Wasm(
     isC2W ? c2wConfig : null,
-    "c2w/debian.wasm",
+    `c2w/${c2wImageName}.wasm`,
   );
 
   /**

@@ -20,16 +20,20 @@ export default function ThemePicker({ currentThemeId, onSelect, theme }: Props) 
     }
   }, [open]);
 
-  // Close on click-outside
+  // Close on click/touch outside
   useEffect(() => {
     if (!open) return;
-    const handler = (e: MouseEvent) => {
+    const handler = (e: MouseEvent | TouchEvent) => {
       if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
         setOpen(false);
       }
     };
     document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
+    document.addEventListener("touchstart", handler);
+    return () => {
+      document.removeEventListener("mousedown", handler);
+      document.removeEventListener("touchstart", handler);
+    };
   }, [open]);
 
   // Close on Escape
@@ -92,11 +96,11 @@ export default function ThemePicker({ currentThemeId, onSelect, theme }: Props) 
       {open && (
         <div
           style={{
-            position: "absolute",
-            top: "calc(100% + 6px)",
-            right: 0,
-            width: 360,
-            maxHeight: 420,
+            position: "fixed",
+            top: (panelRef.current?.getBoundingClientRect().bottom ?? 0) + 6,
+            right: 8,
+            width: "min(360px, calc(100vw - 16px))",
+            maxHeight: "min(420px, calc(100dvh - 80px))",
             background: theme.bgCard,
             border: `1px solid ${theme.border}`,
             borderRadius: 6,

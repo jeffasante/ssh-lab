@@ -4,6 +4,8 @@ export type LabConfig = {
   role: string;
   os: string;
   scenario: ScenarioId;
+  /** For c2w mode: which container image to boot (e.g. 'debian', 'python') */
+  c2wImage?: string;
 };
 
 export type SSHConfig = {
