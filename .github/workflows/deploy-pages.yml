@@ -24,6 +24,18 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Verify debian.wasm is real binary (not LFS pointer)
+        run: |
+          magic=$(head -c 4 frontend/public/c2w/debian.wasm | xxd -p)
+          echo "debian.wasm magic bytes: $magic"
+          if [ "$magic" != "0061736d" ]; then
+            echo "ERROR: debian.wasm is an LFS pointer, not a real WASM binary!"
+            exit 1
+          fi
+          echo "OK: debian.wasm is a valid WASM binary."
 
       - name: Setup Go
         uses: actions/setup-go@v5
