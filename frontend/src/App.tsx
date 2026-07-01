@@ -79,7 +79,14 @@ function getRunMode(): "server" | "wasm" | "c2w" {
   const stored = localStorage.getItem("ssh-lab-mode");
   if (stored === "c2w") return "c2w";
   if (stored === "wasm" || stored === "server") return stored;
-  return "server";
+  
+  // Default to WASM on GitHub Pages or other non-localhost environments
+  const host = window.location.hostname;
+  const isLocal = host === "localhost" || 
+                  host === "127.0.0.1" || 
+                  host.startsWith("192.168.") || 
+                  host.startsWith("10.");
+  return isLocal ? "server" : "wasm";
 }
 
 function loadTheme(): ThemeId {
