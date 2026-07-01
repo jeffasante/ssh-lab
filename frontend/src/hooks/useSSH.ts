@@ -41,7 +41,8 @@ type UseSSHReturn = {
   setNanoFile: (file: NanoFile | null) => void;
 };
 
-const WS_URL = `ws://${window.location.host}/ws`;
+const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+const WS_URL = `${protocol}//${window.location.host}/ws`;
 const API_INIT = `${window.location.protocol}//${window.location.host}/api/init`;
 
 export function useSSH(
