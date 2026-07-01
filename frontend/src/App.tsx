@@ -50,6 +50,25 @@ function saveConfig(config: AppConfig, mode: AppMode) {
   localStorage.setItem("ssh-lab-app-mode", mode);
 }
 
+function saveSessions(sessions: TerminalSession[]) {
+  try {
+    localStorage.setItem("ssh-lab-sessions", JSON.stringify(sessions));
+  } catch {}
+}
+
+function loadSessions(config: AppConfig | null, mode: AppMode): TerminalSession[] {
+  try {
+    const raw = localStorage.getItem("ssh-lab-sessions");
+    if (raw) {
+      const parsed = JSON.parse(raw) as TerminalSession[];
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch {}
+  // Fall back to a single session built from saved config
+  if (!config) return [];
+  return buildInitialSessions(config, mode);
+}
+
 function getRunMode(): "server" | "wasm" | "c2w" {
   if (typeof window === "undefined") return "server";
   const params = new URLSearchParams(window.location.search);
@@ -92,11 +111,16 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const [sessions, setSessions] = useState<TerminalSession[]>(() =>
-    config ? buildInitialSessions(config, loadMode()) : [],
+    loadSessions(config, loadMode()),
   );
   const [activeSessionId, setActiveSessionId] = useState<string | null>(
     () => sessions[0]?.id ?? null,
   );
+
+  // Persist sessions whenever they change
+  useEffect(() => {
+    saveSessions(sessions);
+  }, [sessions]);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -152,16 +176,20 @@ export default function App() {
   }, []);
 
   const handleAddTab = useCallback(() => {
-    const cfg = defaultSessionConfig();
+    // Inherit the active session's config + mode so new tabs match the current setup.
+    // c2w tabs always start a fresh container, but lab/ssh tabs reuse the same server config.
+    const baseSession = sessions.find((s) => s.id === activeSessionId) ?? sessions[0];
+    const inheritedMode: AppMode = baseSession?.mode ?? "lab";
+    const inheritedConfig = baseSession?.config ?? defaultSessionConfig();
     const newSession: TerminalSession = {
       id: generateSessionId(),
-      title: sessionTitle("lab", cfg),
-      mode: "lab",
-      config: cfg,
+      title: sessionTitle(inheritedMode, inheritedConfig),
+      mode: inheritedMode,
+      config: inheritedConfig,
     };
     setSessions((prev) => [...prev, newSession]);
     setActiveSessionId(newSession.id);
-  }, []);
+  }, [sessions, activeSessionId]);
 
   const handleCloseTab = useCallback(
     (id: string) => {
@@ -255,6 +283,7 @@ export default function App() {
             onClick={() => {
               localStorage.removeItem("ssh-lab-config");
               localStorage.removeItem("ssh-lab-app-mode");
+              localStorage.removeItem("ssh-lab-sessions");
               setConfig(null);
               setSessions([]);
               setActiveSessionId(null);
