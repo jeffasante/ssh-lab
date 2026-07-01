@@ -15,6 +15,7 @@ import Onboarding from "./components/Onboarding";
 import ThemePicker from "./components/ThemePicker";
 import TabBar from "./components/TabBar";
 import SessionTerminal from "./components/SessionTerminal";
+import HelpModal from "./components/HelpModal";
 import { getTheme, ThemeId, themeList } from "./themes";
 
 const CONFIG_VERSION = 2;
@@ -132,6 +133,7 @@ export default function App() {
   }, []);
 
   const [themeId, setThemeId] = useState<ThemeId>(loadTheme);
+  const [helpOpen, setHelpOpen] = useState(false);
   const runMode = useMemo(getRunMode, []);
   const theme = useMemo(() => getTheme(themeId), [themeId]);
 
@@ -227,6 +229,11 @@ export default function App() {
       : activeSession?.mode === "ssh"
         ? ((activeSession.config as SSHConfig)?.host ?? "")
         : "debian";
+
+  const activeC2wImage =
+    activeSession?.mode === "c2w"
+      ? ((activeSession.config as LabConfig)?.c2wImage ?? "debian")
+      : undefined;
 
   return (
     <div
@@ -327,6 +334,24 @@ export default function App() {
             }}
             theme={theme}
           />
+          {/* Help / tutorials button */}
+          <button
+            onClick={() => setHelpOpen(true)}
+            title="Quick Reference"
+            style={{
+              background: "transparent",
+              border: `1px solid ${theme.border}`,
+              borderRadius: 4,
+              color: theme.textMuted,
+              cursor: "pointer",
+              padding: "3px 7px",
+              fontSize: 12,
+              fontFamily: "monospace",
+              lineHeight: 1,
+            }}
+          >
+            ?
+          </button>
           <div
             style={{
               width: 6,
@@ -393,6 +418,13 @@ export default function App() {
           />
         )}
       </div>
+      <HelpModal
+        open={helpOpen}
+        onClose={() => setHelpOpen(false)}
+        theme={theme}
+        mode={activeSession?.mode ?? "lab"}
+        c2wImage={activeC2wImage}
+      />
     </div>
   );
 }
