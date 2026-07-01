@@ -90,7 +90,7 @@ export default function SessionTerminal({
         nanoFile={result.nanoFile}
         setNanoFile={result.setNanoFile}
         theme={theme}
-        showPrompt={mode !== "c2w"}
+        showPrompt={mode === "lab"}
       />
     </div>
   );

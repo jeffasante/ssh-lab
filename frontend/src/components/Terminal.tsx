@@ -184,10 +184,25 @@ export default function Terminal({
 
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (isPtySession) {
+      const isCmdOrCtrl = e.ctrlKey || e.metaKey;
+      const isTerminalInterrupt = e.ctrlKey && ["c", "d", "l"].includes(e.key.toLowerCase());
+      const isPaste = isCmdOrCtrl && e.key.toLowerCase() === "v";
+      
+      // Let browser handle native copy/paste/reload/etc.
+      if (isCmdOrCtrl && !isTerminalInterrupt && !isPaste) {
+        return;
+      }
+
       e.preventDefault();
 
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c") {
-        onCommand("\x03");
+      if (isTerminalInterrupt) {
+        if (e.key.toLowerCase() === "c") {
+          onCommand("\x03");
+        } else if (e.key.toLowerCase() === "d") {
+          onCommand("\x04");
+        } else if (e.key.toLowerCase() === "l") {
+          onCommand("\x0c");
+        }
         setInput("");
         return;
       }

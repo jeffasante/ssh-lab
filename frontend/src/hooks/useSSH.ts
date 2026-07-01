@@ -220,10 +220,10 @@ export function useSSH(
   const sendCommand = useCallback(
     (cmd: string) => {
       if (isSSH) {
-        // SSH mode: send keystroke followed by newline
+        // SSH mode: send keystroke directly
         if (ws.current?.readyState === WebSocket.OPEN) {
           ws.current.send(
-            JSON.stringify({ type: "ssh_keystroke", payload: cmd + "\n" }),
+            JSON.stringify({ type: "ssh_keystroke", payload: cmd }),
           );
         }
         return;
