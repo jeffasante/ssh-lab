@@ -194,7 +194,8 @@ export function useContainer2Wasm(
       }
 
       // Send init with image URL before xterm-pty posts the shared PTY buffer.
-      worker.postMessage({ type: "init", imagename: imageUrl });
+      const absoluteImageUrl = new URL(imageUrl, window.location.href).href;
+      worker.postMessage({ type: "init", imagename: absoluteImageUrl });
       appendLine("Image selected\n");
 
       const ttyServer = new TtyServer(slave);
