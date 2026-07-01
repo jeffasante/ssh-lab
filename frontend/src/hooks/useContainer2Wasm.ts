@@ -251,14 +251,31 @@ export function useContainer2Wasm(
         return;
       }
 
-      fetch(`/api/internet?url=${encodeURIComponent(url)}`)
-        .then(async (response) => {
-          const payload = await response.json();
-          if (!response.ok || !payload.ok) {
-            throw new Error(payload.error || response.statusText);
+      const fetchViaProxy = async (targetUrl: string): Promise<string> => {
+        // Try the local backend first (works in Docker / dev server).
+        try {
+          const resp = await fetch(`/api/internet?url=${encodeURIComponent(targetUrl)}`);
+          if (resp.ok) {
+            const payload = await resp.json();
+            if (payload.ok) return payload.body as string;
+            throw new Error(payload.error || resp.statusText);
           }
+        } catch {
+          // Backend unreachable (e.g. GitHub Pages static host) — fall through.
+        }
+        // Public CORS proxy fallback for static deployments.
+        const proxyResp = await fetch(
+          `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`
+        );
+        if (!proxyResp.ok) throw new Error(`HTTP ${proxyResp.status}`);
+        const data = await proxyResp.json();
+        return data.contents as string;
+      };
+
+      fetchViaProxy(url)
+        .then((body) => {
           appendLine(
-            `${payload.body.replace(/\r?\n?$/, "")}\nroot@localhost:/# `,
+            `${body.replace(/\r?\n?$/, "")}\nroot@localhost:/# `,
           );
         })
         .catch((error) => {

@@ -86,6 +86,7 @@ export default function Terminal({
   const outRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const pendingRef = useRef(false);
+  const [copyFlash, setCopyFlash] = useState(false);
   const linesLenRef = useRef(0);
   // Always-current count of lines — updated in useEffect, never from closure
   const liveCountRef = useRef(0);
@@ -830,6 +831,32 @@ export default function Terminal({
       </div>
 
       {/* Output */}
+      {isPtySession && (
+        <div style={{ display: "flex", justifyContent: "flex-end", padding: "2px 8px", background: "#0d0d0d", flexShrink: 0 }}>
+          <button
+            onClick={() => {
+              const text = outRef.current?.innerText ?? "";
+              navigator.clipboard.writeText(text).then(() => {
+                setCopyFlash(true);
+                setTimeout(() => setCopyFlash(false), 1200);
+              });
+            }}
+            style={{
+              background: "transparent",
+              border: `1px solid ${copyFlash ? theme.accent : theme.border}`,
+              color: copyFlash ? theme.accent : theme.textMuted,
+              cursor: "pointer",
+              padding: "1px 8px",
+              fontSize: 10,
+              fontFamily: "monospace",
+              borderRadius: 3,
+              transition: "color 0.2s, border-color 0.2s",
+            }}
+          >
+            {copyFlash ? "✓ copied" : "copy output"}
+          </button>
+        </div>
+      )}
       <div
         ref={outRef}
         style={{
@@ -839,6 +866,7 @@ export default function Terminal({
           fontSize: 12.5,
           lineHeight: 1.65,
           fontFamily: "'SF Mono','Fira Code','Cascadia Code',monospace",
+          userSelect: "text",
         }}
       >
         {lines.map((ln, i) => {
